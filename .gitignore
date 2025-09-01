@@ -1,0 +1,41 @@
+# ===== Python Virtual Environment =====
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== Buildozer / Android =====
+.buildozer/
+bin/
+*.apk
+*.aab
+*.obb
+
+# ===== Python / UV / Packaging =====
+*.egg-info/
+dist/
+build/
+
+# ===== OS / Editor / IDE =====
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+*.log
+
+# ===== Temporary / Cache =====
+*.tmp
+*.bak
+*.orig
+
+# ===== Keep in Git (do NOT ignore these) =====
+# pyproject.toml
+# requirements.txt
+# uv.lock
+# Dockerfile
+# buildozer.spec
+# README.md
+# source/ (your source code directory)
