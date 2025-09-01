@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev libncurses5-dev libncursesw5-dev \
     libsqlite3-dev libreadline-dev libbz2-dev \
     liblzma-dev libgdbm-dev libnss3-dev \
-    pkg-config xz-utils && \
+    pkg-config xz-utils \
+    autoconf automake libtool && \  
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===== Python ツールのインストール =====
@@ -58,3 +59,8 @@ ENV PATH="$ANDROIDSDK/cmdline-tools/latest/bin:$ANDROIDSDK/platform-tools:$PATH"
 
 # ===== デフォルトコマンド =====
 CMD ["/bin/bash"]
+
+RUN mkdir -p /root/.buildozer/android/platform/android-sdk/tools/bin && \
+    ln -s /root/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+          /root/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+
