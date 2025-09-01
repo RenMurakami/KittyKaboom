@@ -31,11 +31,5 @@ Thumbs.db
 *.bak
 *.orig
 
-# ===== Keep in Git (do NOT ignore these) =====
-# pyproject.toml
-# requirements.txt
-# uv.lock
-# Dockerfile
-# buildozer.spec
-# README.md
-# source/ (your source code directory)
+# ===== Windows Zone.Identifier =====
+*.Zone.Identifier
