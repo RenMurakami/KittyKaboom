@@ -1,0 +1,6 @@
+[submodule "p4a"]
+	path = p4a
+	url = https://github.com/kivy/python-for-android.git
+[submodule "pyjnius"]
+	path = pyjnius
+	url = https://github.com/kivy/pyjnius.git
