@@ -85,7 +85,7 @@ KittyKaboom/
 ```
 ```.venv/``` and ```.buildozer/``` are generated locally and not included in Git.
 
-Managing Dependencies
+## Managing Dependencies 
 Add new Python packages:
 
 ```bash
