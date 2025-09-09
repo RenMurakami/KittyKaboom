@@ -115,6 +115,9 @@ class GameWidgetBase(Widget):
         if self.platform != "android":
             Window.bind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
 
+        # 現在タンクが左を向いているか
+        self.current_facing_left = True  # ← ここを追加
+
     # --- 背景更新 ---
     def _update_bg(self, *args):
         self.bg_rect.pos = (0, 0)
@@ -174,6 +177,29 @@ class GameWidgetBase(Widget):
         new_y = self.full_tank.y + self.vy
         tank_w, tank_h = self.full_tank.size
 
+        # --- 画面端補正 ---
+        if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
+        elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
+        if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
+        elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
+
+
+         # 壁補正
+        for wall in self.walls:
+            wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
+            if (new_x < wx + ww and new_x + self.full_tank.width > wx and
+                new_y < wy + wh and new_y + self.full_tank.height > wy):
+                # 水平方向
+                if self.full_tank.x + self.full_tank.width <= wx or self.full_tank.x >= wx + ww:
+                    self.vx = -self.vx * self.bounce
+                    new_x = self.full_tank.x + self.vx
+                # 垂直方向
+                if self.full_tank.y + self.full_tank.height <= wy or self.full_tank.y >= wy + wh:
+                    self.vy = -self.vy * self.bounce
+                    new_y = self.full_tank.y + self.vy
+
+
+        '''
         # --- 画面端衝突 ---
         if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
         elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
@@ -195,6 +221,15 @@ class GameWidgetBase(Widget):
                     self.vy = -self.vy * self.bounce
                     if self.vy > 0: new_y = wy + w_h
                     else: new_y = wy - tank_h
+        '''
+        # --- 左右自動反転 ---
+        if self.vx > 0.1 and self.full_tank.facing_left:
+            self.full_tank.flip_horizontal(False)  # 右向き
+            print('Right')
+        elif self.vx < -0.1 and not self.full_tank.facing_left:
+            self.full_tank.flip_horizontal(True)  # 左向き
+            print('Left')
+                       
 
         self.full_tank.pos = (new_x, new_y)
 
