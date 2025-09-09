@@ -12,12 +12,13 @@ package.domain = org.test
 # (str) Source code where the main.py live
 # source.dir = source, pyjnius
 source.dir = source
+#source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,png,jpg,jpeg,kv,atlas,mp3,wav,ogg
 
 # (list) List of inclusions using pattern matching
-#source.include_patterns = assets/*,images/*.png
+source.include_patterns = resource/*, resource/**/*
 
 # (list) Source files to exclude (let empty to not exclude anything)
 #source.exclude_exts = spec
@@ -27,8 +28,7 @@ source.include_exts = py,png,jpg,kv,atlas
 
 # (list) List of exclusions using pattern matching
 # Do not prefix with './'
-# source.exclude_patterns = license,images/*/*.jpg
-source.exclude_patterns = .git, .venv38, __pycache__, *.pyc
+source.exclude_patterns = .git, .venv, __pycache__, *.pyc, p4a_local_backup, p4a_recipes_backup
 
 # (str) Application versioning (method 1)
 version = 0.1
@@ -39,7 +39,6 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-# requirements = python3,kivy,plyer,pyjnius
 requirements = python3,kivy,plyer,pyjnius
 
 # (str) Custom source folders for requirements
@@ -50,7 +49,7 @@ requirements = python3,kivy,plyer,pyjnius
 #presplash.filename = %(source.dir)s/data/presplash.png
 
 # (str) Icon of the application
-icon.filename = resource/icon.png
+icon.filename = source/resource/icon.png
 
 # (list) Supported orientations
 # Valid options are: landscape, portrait, portrait-reverse or landscape-reverse
@@ -111,7 +110,7 @@ android.api = 33
 android.minapi = 21
 
 # (int) Android SDK version to use
-android.sdk = 24
+android.sdk = 33
 
 # (str) Android NDK version to use
 android.ndk = 25c
@@ -144,11 +143,11 @@ android.sdk_path = /root/.buildozer/android/platform/android-sdk
 # android.accept_sdk_license = False
 
 # (str) Android entry point, default is ok for Kivy-based app
-#android.entrypoint = org.kivy.android.PythonActivity
+android.entrypoint = org.kivy.android.PythonActivity
 
 # (str) Full name including package path of the Java class that implements Android Activity
 # use that parameter together with android.entrypoint to set custom Java class instead of PythonActivity
-#android.activity_class_name = org.kivy.android.PythonActivity
+android.activity_class_name = org.kivy.android.PythonActivity
 
 # (str) Extra xml to write directly inside the <manifest> element of AndroidManifest.xml
 # use that parameter to provide a filename from where to load your custom XML code
@@ -291,7 +290,9 @@ android.sdk_path = /root/.buildozer/android/platform/android-sdk
 android.archs = arm64-v8a, armeabi-v7a
 
 # (int) overrides automatic versionCode computation (used in build.gradle)
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA# this is not the same as app version and should only be edited if you know what you're doing
+# android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA# this is not the same as app version and should only be edited if you know what you're doing
+android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, VIBRATE, BODY_SENSORS
+
 # android.numeric_version = 1
 
 # (bool) enables Android auto backup feature (Android API >=23)
@@ -323,31 +324,29 @@ android.allow_backup = True
 #p4a.url =
 
 # (str) python-for-android fork to use in case if p4a.url is not specified, defaults to upstream (kivy)
-#p4a.fork = kivy
+p4a.fork = kivy
 
 # (str) python-for-android branch to use, defaults to master
-#p4a.branch = master
+p4a.branch = master
 
 # (str) python-for-android specific commit to use, defaults to HEAD, must be within p4a.branch
 #p4a.commit = HEAD
 
 # (str) python-for-android git clone directory (if empty, it will be automatically cloned from github)
 # p4a.source_dir =
-p4a.source_dir = /app/p4a
 
 # (str) The directory in which python-for-android should look for your own build recipes (if any)
 # p4a.local_recipes =
-# p4a.local_recipes = ./p4a-recipes
-p4a.local_recipes = /app/p4a
 
 # (str) Filename to the hook for p4a
 #p4a.hook =
 
 # (str) Bootstrap to use for android builds
 # p4a.bootstrap = sdl2
+p4a.bootstrap = sdl2
 
 # (int) port number to specify an explicit --port= p4a argument (eg for bootstrap flask)
-#p4a.port =
+# p4a.port =
 
 # Control passing the --use-setup-py vs --ignore-setup-py to p4a
 # "in the future" --use-setup-py is going to be the default behaviour in p4a, right now it is not

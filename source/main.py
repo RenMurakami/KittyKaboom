@@ -26,4 +26,5 @@ class BallRollerApp(App):
 
 
 if __name__ == '__main__':
+    print("Game start !!")
     BallRollerApp().run()

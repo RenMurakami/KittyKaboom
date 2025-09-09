@@ -63,4 +63,3 @@ CMD ["/bin/bash"]
 RUN mkdir -p /root/.buildozer/android/platform/android-sdk/tools/bin && \
     ln -s /root/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager \
           /root/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-

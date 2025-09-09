@@ -14,3 +14,5 @@ class Stage1_2(BaseStage):
         ]
         for wall in self.game.walls:
             self.game.add_widget(wall)
+
+        self.game.full_tank.walls = self.game.walls
