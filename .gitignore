@@ -28,8 +28,10 @@ Thumbs.db
 
 # ===== Temporary / Cache =====
 *.tmp
+*.TMP
 *.bak
 *.orig
+*.Identifier
 
 # ===== Windows Zone.Identifier =====
 *.Zone.Identifier
