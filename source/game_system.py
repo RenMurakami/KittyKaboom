@@ -183,45 +183,32 @@ class GameWidgetBase(Widget):
         if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
         elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-
-         # 壁補正
-        for wall in self.walls:
-            wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
-            if (new_x < wx + ww and new_x + self.full_tank.width > wx and
-                new_y < wy + wh and new_y + self.full_tank.height > wy):
-                # 水平方向
-                if self.full_tank.x + self.full_tank.width <= wx or self.full_tank.x >= wx + ww:
-                    self.vx = -self.vx * self.bounce
-                    new_x = self.full_tank.x + self.vx
-                # 垂直方向
-                if self.full_tank.y + self.full_tank.height <= wy or self.full_tank.y >= wy + wh:
-                    self.vy = -self.vy * self.bounce
-                    new_y = self.full_tank.y + self.vy
-
-
-        '''
-        # --- 画面端衝突 ---
-        if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
-        elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
-        if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
-        elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
-
         # --- 壁との衝突 ---
         for wall in self.walls:
-            wx, wy, w_w, w_h = wall.x, wall.y, wall.width, wall.height
-            if (new_x < wx + w_w and new_x + tank_w > wx and
-                new_y < wy + w_h and new_y + tank_h > wy):
+            wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
+            if (new_x < wx + ww and new_x + tank_w > wx and
+                new_y < wy + wh and new_y + tank_h > wy):
+                
+                # 前フレーム位置
                 prev_x = self.full_tank.x
                 prev_y = self.full_tank.y
-                if prev_x + tank_w <= wx or prev_x >= wx + w_w:
+        
+                # 横からぶつかったか？
+                if prev_x + tank_w <= wx:  # 左から右へ衝突
+                    new_x = wx - tank_w
                     self.vx = -self.vx * self.bounce
-                    if self.vx > 0: new_x = wx + w_w
-                    else: new_x = wx - tank_w
-                if prev_y + tank_h <= wy or prev_y >= wy + w_h:
+                elif prev_x >= wx + ww:   # 右から左へ衝突
+                    new_x = wx + ww
+                    self.vx = -self.vx * self.bounce
+        
+                # 縦からぶつかったか？
+                if prev_y + tank_h <= wy:  # 下から上へ衝突
+                    new_y = wy - tank_h
                     self.vy = -self.vy * self.bounce
-                    if self.vy > 0: new_y = wy + w_h
-                    else: new_y = wy - tank_h
-        '''
+                elif prev_y >= wy + wh:   # 上から下へ衝突
+                    new_y = wy + wh
+                    self.vy = -self.vy * self.bounce
+                
         # --- 左右自動反転 ---
         if self.vx > 0.1 and self.full_tank.facing_left:
             self.full_tank.flip_horizontal(False)  # 右向き
