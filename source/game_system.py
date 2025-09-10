@@ -110,6 +110,10 @@ class GameWidgetBase(Widget):
         self.bounce = 0.7
         self.walls = []
 
+        # --- 砲塔回転速度 ---
+        self.cannon_angle_speed = 1.0  # 1フレームあたりの角度変化
+
+
         self.platform = core_platform
         self._keys = set()
         if self.platform != "android":
@@ -155,6 +159,11 @@ class GameWidgetBase(Widget):
                 if accel and all(a is not None for a in accel):
                     x, y, z = accel
                     ax, ay = -x * 0.3, -y * 0.3
+                    # --- ジャイロで砲塔角度変更 ---
+                    if y > 1:
+                        self.full_tank.rotate_cannon(+self.cannon_angle_speed)
+                    elif y < -1:
+                        self.full_tank.rotate_cannon(-self.cannon_angle_speed)
                 else:
                     ay += self.gravity
             except Exception as e:
@@ -163,7 +172,10 @@ class GameWidgetBase(Widget):
         else:
             if 'left' in self._keys: ax -= 0.3
             if 'right' in self._keys: ax += 0.3
-            if 'up' in self._keys: ay += 0.3
+            if 'up' in self._keys:
+                self.full_tank.rotate_cannon(+self.cannon_angle_speed)
+            if 'down' in self._keys:
+                self.full_tank.rotate_cannon(-self.cannon_angle_speed)
             ay += self.gravity
 
         # --- 速度更新 ---
