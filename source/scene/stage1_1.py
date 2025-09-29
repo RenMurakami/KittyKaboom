@@ -14,5 +14,6 @@ class Stage1_1(BaseStage):
         for wall in self.game.walls:
             self.game.add_widget(wall)
 
-        # FullTank に壁リストを渡す
-        self.game.full_tank.walls = self.game.walls
+        # FullTank 全員に壁リストを渡す
+        for tank in self.game.full_tanks:
+            tank.walls = self.game.walls

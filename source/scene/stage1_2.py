@@ -13,6 +13,8 @@ class Stage1_2(BaseStage):
             Wall(pos=(600, 200), size=(300, 20))
         ]
         for wall in self.game.walls:
-            self.game.add_widget(wall)
-
-        self.game.full_tank.walls = self.game.walls
+                    self.game.add_widget(wall)
+        
+        # FullTank 全員に壁リストを渡す
+        for tank in self.game.full_tanks:
+            tank.walls = self.game.walls

@@ -77,9 +77,18 @@ class GameWidgetBase(Widget):
             self.bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._update_bg, size=self._update_bg)
 
-        # --- FullTank ---
-        self.full_tank = FullTank(pos=(200, 400))
-        self.add_widget(self.full_tank)
+        # --- FullTank を 2 台 ---
+        self.full_tanks = [
+            FullTank(pos=(200, 400)),
+            FullTank(pos=(600, 400))
+        ]
+        for tank in self.full_tanks:
+            self.add_widget(tank)
+        self.current_turn = 0  # どのタンクのターンか
+        self.active_tank = self.full_tanks[self.current_turn]
+
+        # --- 10 秒ごとにターン切り替え ---
+        Clock.schedule_interval(self._switch_turn, 10)
 
         # --- ログ用 ---
         self.logs = deque(maxlen=self.LOG_MAX_LINES)
@@ -120,7 +129,17 @@ class GameWidgetBase(Widget):
             Window.bind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
 
         # 現在タンクが左を向いているか
-        self.current_facing_left = True  # ← ここを追加
+        self.current_facing_left = True  
+
+    def _switch_turn(self, dt):
+        """10秒ごとに操作するタンクを切り替える"""
+        self.current_turn = (self.current_turn + 1) % len(self.full_tanks)
+        self.active_tank = self.full_tanks[self.current_turn]
+        # 速度をリセット（前のタンクの速度を引き継がない）
+        self.vx = 0
+        self.vy = 0
+        print(f"🔄 Turn switched! Now controlling Tank {self.current_turn+1}")
+
 
     # --- 背景更新 ---
     def _update_bg(self, *args):
@@ -153,29 +172,30 @@ class GameWidgetBase(Widget):
     # --- ゲームループ ---
     def update_game_state(self, dt):
         ax = ay = 0
+        tank = self.active_tank
         if self.platform == "android":
             try:
                 accel = accelerometer.acceleration
                 if accel and all(a is not None for a in accel):
                     x, y, z = accel
-                    ax, ay = -x * 0.3, -y * 0.3
+                    ay = -y * 0.3  # ← 横だけ反映、縦方向は無視
+                    ax += self.gravity  # ← 常に重力だけ適用
                     # --- ジャイロで砲塔角度変更 ---
-                    if y > 1:
-                        self.full_tank.rotate_cannon(+self.cannon_angle_speed)
-                    elif y < -1:
-                        self.full_tank.rotate_cannon(-self.cannon_angle_speed)
+                    if x > 1:
+                        tank.rotate_cannon(+self.cannon_angle_speed)
+                    elif x < -1:
+                        tank.rotate_cannon(-self.cannon_angle_speed)
                 else:
-                    ay += self.gravity
-            except Exception as e:
-                #print(f"Accel error: {e}")
-                ay += self.gravity
+                    ax += self.gravity
+            except Exception:
+                ax += self.gravity
         else:
             if 'left' in self._keys: ax -= 0.3
             if 'right' in self._keys: ax += 0.3
             if 'up' in self._keys:
-                self.full_tank.rotate_cannon(+self.cannon_angle_speed)
+                tank.rotate_cannon(+self.cannon_angle_speed)
             if 'down' in self._keys:
-                self.full_tank.rotate_cannon(-self.cannon_angle_speed)
+                tank.rotate_cannon(-self.cannon_angle_speed)
             ay += self.gravity
 
         # --- 速度更新 ---
@@ -184,10 +204,10 @@ class GameWidgetBase(Widget):
         self.vx *= self.friction
         self.vy *= self.friction
 
-        # --- 位置更新 ---
-        new_x = self.full_tank.x + self.vx
-        new_y = self.full_tank.y + self.vy
-        tank_w, tank_h = self.full_tank.size
+        # --- 位置更新（今のターンのタンクだけ動かす）---
+        new_x = tank.x + self.vx
+        new_y = tank.y + self.vy
+        tank_w, tank_h = tank.size
 
         # --- 画面端補正 ---
         if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
@@ -202,8 +222,8 @@ class GameWidgetBase(Widget):
                 new_y < wy + wh and new_y + tank_h > wy):
                 
                 # 前フレーム位置
-                prev_x = self.full_tank.x
-                prev_y = self.full_tank.y
+                prev_x = tank.x
+                prev_y = tank.y
         
                 # 横からぶつかったか？
                 if prev_x + tank_w <= wx:  # 左から右へ衝突
@@ -222,15 +242,12 @@ class GameWidgetBase(Widget):
                     self.vy = -self.vy * self.bounce
                 
         # --- 左右自動反転 ---
-        if self.vx > 0.1 and self.full_tank.facing_left:
-            self.full_tank.flip_horizontal(False)  # 右向き
-            print('Right')
-        elif self.vx < -0.1 and not self.full_tank.facing_left:
-            self.full_tank.flip_horizontal(True)  # 左向き
-            print('Left')
-                       
+        if self.vx > 0.1 and tank.facing_left:
+            tank.flip_horizontal(False)
+        elif self.vx < -0.1 and not tank.facing_left:
+            tank.flip_horizontal(True)
 
-        self.full_tank.pos = (new_x, new_y)
+        tank.pos = (new_x, new_y)
 
     # --- キー入力 ---
     def _on_key_down(self, window, key, scancode, codepoint, modifiers):
