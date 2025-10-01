@@ -3,35 +3,38 @@ from kivy.uix.widget import Widget
 from kivy.vector import Vector
 from kivy.graphics import Ellipse, Color, InstructionGroup
 from kivy.uix.label import Label
-
+import time
 
 class Ball(Widget):
-    """
-    The main player ball with dynamic, animated graphics.
-    The graphics are a pulsating gradient that changes color based on speed.
-    """
+    """The projectile ball, updated for physics, gravity, and firing state."""
     velocity = Vector(0, 0)
+    gravity_scale = 0.0  
+    fired = False  
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.bounce_count = 0  # Initialize bounce counter
+        self.size = (20, 20)
+        self.center_x = self.x 
+        self.center_y = self.y
+        
+        self.fired = False 
+        self.velocity = Vector(0, 0)
+        self.gravity_scale = 0.0 # Will be set by GameWidgetBase
+        self.friction = 0.99
+        self.bounce_limit = 2
+        self.bounce_count = 0
 
         # Draw the base ball
         with self.canvas:
-            self.outer_color = Color(0, 0, 1, 1)  # Blue border
+            self.outer_color = Color(1, 1, 1, 0)
             self.outer_ellipse = Ellipse(pos=self.pos, size=self.size)
-
-        # Debug label
-        self.debug_label = Label(text="Debug", pos=(10, 10))
-        self.add_widget(self.debug_label)
 
         # InstructionGroup for the gradient to allow easy clearing and redrawing
         self.gradient_group = InstructionGroup()
         self.canvas.add(self.gradient_group)
 
-        # Time offset for the pulsating animation
-        self.time_offset = 0.0
-
-        # Keep graphics synced with widget position and size
+        self.time_offset = time.time()
         self.bind(pos=self.update_graphics, size=self.update_graphics)
 
     def update_graphics(self, *args):
@@ -39,100 +42,150 @@ class Ball(Widget):
         self.outer_ellipse.pos = self.pos
         self.outer_ellipse.size = self.size
 
-    def update(self, dt, walls, bounce_factor=0.5):
-        """Main update function called by the game loop."""
-        self.time_offset += dt
-        self.move(bounce_factor, walls)
-        self.draw_gradient()
+    def update(self, dt, walls, bounce_factor):
+        """Moves the ball and calculates new physics state."""
+        if not self.fired:
+            # If the ball is not fired, it should not update.
+            return
+            
+        # 1. Apply Gravity
+        self.velocity.y += self.gravity_scale
 
+        # 2. Apply Position Update
+        new_pos = self.pos[0] + self.velocity.x, self.pos[1] + self.velocity.y
+        old_x, old_y = self.x, self.y
+        
+        
+        
+        
+
+        # 3. Apply Friction (Air Resistance)
+        self.velocity.x *= self.friction
+        self.velocity.y *= self.friction
+
+        # 4. Check Window Bounds (Floor and Screen Edges)
+        if new_pos[1] < 0: # Floor collision
+            new_pos = new_pos[0], 0
+            self.velocity.y = -self.velocity.y * bounce_factor
+            self.velocity.x *= 0.8 # Additional ground friction
+            self.bounce_count += 1
+            
+            # CRITICAL TERMINATION 1: Ball settles on the ground
+            if abs(self.velocity.y) < 1 and abs(self.velocity.x) < 1:
+                self.velocity = Vector(0, 0)
+                self.fired = False # <--- MUST BE SET TO FALSE
+                return # Stop processing
+                
+        if new_pos[0] < 0 or new_pos[0] + self.width > self.parent.width:
+            # Side wall collision
+            self.velocity.x = -self.velocity.x * bounce_factor
+            new_pos = (max(0, min(new_pos[0], self.parent.width - self.width)), new_pos[1])
+            self.bounce_count += 1
+
+        # --- START OF NEW WALL COLLISION LOGIC ---
+
+        # Test horizontal movement
+        self.x = new_pos[0]
+        collided_x = any(self.collide_widget(w) for w in walls)
+        if collided_x:
+            self.x = old_x # Revert position
+            self.velocity.x *= -bounce_factor
+            self.bounce_count += 1
+        
+        # Test vertical movement
+        self.y = new_pos[1]
+        collided_y = any(self.collide_widget(w) for w in walls)
+        if collided_y:
+            self.y = old_y # Revert position
+            self.velocity.y *= -bounce_factor
+            
+            # Additional logic to handle "settling" on a horizontal wall 
+            if abs(self.velocity.y) < 1:
+                self.velocity.y = 0
+            
+            self.bounce_count += 1
+            
+        # Re-calculate new_pos based on corrected collision results
+        new_pos = self.x, self.y 
+        
+        # --- END OF NEW WALL COLLISION LOGIC ---
+
+
+
+        # 5. Check Termination Conditions (Two-Bounce Limit)
+        if self.bounce_count >= self.bounce_limit:
+            self.velocity = Vector(0, 0)
+            self.fired = False # <--- MUST BE SET TO FALSE
+            return # Stop processing
+        
+        # 6. Check Wall Collision (simplified, assuming walls are handled elsewhere or are complex)
+        # (Simplified wall logic omitted here for focus, but ensure your existing wall collision 
+        # doesn't prevent velocity from reaching zero.)
+
+        self.pos = new_pos
+        
+        self.draw_gradient() 
+        
     def draw_gradient(self):
         """
         Draws the dynamic, animated gradient inside the ball.
-        The animation is time-based, and the color changes based on speed
-        from Green -> Blue -> Red.
+        (Logic kept from user's original input)
         """
-        # Clear previous gradient instructions
         self.gradient_group.clear()
-
-        # Ball speed to color mapping
+        
         speed = self.velocity.length()
-        # Normalize speed to a 0.0 to 1.0 range, capping it to prevent extreme values.
-        norm_speed = min(speed / 30.0, 1.0)
+        norm_speed = min(speed / 25.0, 1.0)
 
-        # Interpolate the base color based on speed: Green -> Blue -> Red.
-        if norm_speed < 0.5:
-            # Transition from Green (0, 1, 0) to Blue (0, 0, 1).
-            t = norm_speed / 0.5
-            interp_r = 0.0
-            interp_g = 1.0 - t
-            interp_b = t
+        if norm_speed < 0.3:
+            t = norm_speed / 0.3
+            interp_r, interp_g, interp_b = 0.0, 1.0 - t, t # Green (1.0) -> Blue (1.0)
         else:
-            # Transition from Blue (0, 0, 1) to Red (1, 0, 0).
-            t = (norm_speed - 0.5) / 0.5
-            interp_r = t
-            interp_g = 0.0
-            interp_b = 1.0 - t
+            t = (norm_speed - 0.3) / 0.7
+            interp_r, interp_g, interp_b = t, 0.0, 1.0 - t
 
-        # Number of ellipses to draw to create the gradient effect.
         num_ellipses = 40
 
-        # Iterate from the largest ellipse (outermost) to the smallest (innermost).
         for i in range(num_ellipses, 0, -1):
-            # Calculate the progress of this ellipse from 0 to 1 (outer to inner).
             progress = i / num_ellipses
-
-            # The size of each ring is based on its progress and a time-modulated factor.
-            # The sin function creates the pulsing effect.
             animation_factor = math.sin(self.time_offset * 5 + progress * 15) * 0.2 + 1.0
             size_factor = progress * animation_factor
             
-            # The color of each individual ellipse in the gradient.
-            # We transition from the interpolated color at the edge to black at the center.
-            r = interp_r * size_factor
-            g = interp_g * size_factor
-            b = interp_b * size_factor
+            r, g, b = interp_r * size_factor, interp_g * size_factor, interp_b * size_factor
             
-            # The size of each ellipse scales down towards the center.
             ring_size = (self.width * size_factor, self.height * size_factor)
-            
-            # Center the ellipse's position.
             ring_pos = (
                 self.center_x - ring_size[0] / 2.0,
                 self.center_y - ring_size[1] / 2.0
             )
 
-            # Add the new color and ellipse instructions to the canvas.
-            color_instr = Color(r, g, b, 1.0)
-            ellipse_instr = Ellipse(pos=ring_pos, size=ring_size)
-            self.gradient_group.add(color_instr)
-            self.gradient_group.add(ellipse_instr)
+            self.gradient_group.add(Color(r, g, b, 1.0))
+            self.gradient_group.add(Ellipse(pos=ring_pos, size=ring_size))
+
 
     def move(self, bounce_factor, walls):
         """
         Moves the ball and handles bouncing from walls and window edges.
-        Uses rollback to the last valid position instead of snapping to wall edges.
+        If the ball settles (velocity near zero at the bottom), stop firing.
         """
-        if not self.parent:
-            return
+        if not self.parent: return
     
-        # Save old position before moving
         old_x, old_y = self.x, self.y
     
         # ---- Move X ----
         self.x += self.velocity.x
         collided_x = any(self.collide_widget(w) for w in walls)
         if collided_x:
-            # Roll back and bounce
             self.x = old_x
             self.velocity.x *= -bounce_factor
+            self.bounce_count += 1
     
         # ---- Move Y ----
         self.y += self.velocity.y
         collided_y = any(self.collide_widget(w) for w in walls)
         if collided_y:
-            # Roll back and bounce
             self.y = old_y
             self.velocity.y *= -bounce_factor
+            self.bounce_count += 1
     
         # ---- Window bounds ----
         if self.x < 0:
@@ -142,10 +195,20 @@ class Ball(Widget):
             self.right = self.parent.width
             self.velocity.x *= -bounce_factor
     
-        if self.y < 0:
-            self.y = 0
+        if self.y < 50: # Assuming 50 is the ground wall height
+            self.y = 50 
             self.velocity.y *= -bounce_factor
-        elif self.top > self.parent.height:
-            self.top = self.parent.height
-            self.velocity.y *= -bounce_factor
-    
+            
+            # --- Bounce Logic ---
+            self.bounce_count += 1  # <--- Increment Bounce Count
+            
+            # Stop if ball settles (existing logic)
+            if abs(self.velocity.y) < 1 and abs(self.velocity.x) < 1:
+                 self.velocity = Vector(0, 0)
+                 self.fired = False 
+                 
+                # --- NEW: Two-Bounce Limit ---
+        if self.bounce_count >= 2:
+            self.velocity = Vector(0, 0)
+            self.fired = False  # Signal end of turn and removal
+            return
