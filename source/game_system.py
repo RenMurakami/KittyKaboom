@@ -173,22 +173,45 @@ class GameWidgetBase(Widget):
     def update_game_state(self, dt):
         ax = ay = 0
         tank = self.active_tank
+        
+        # Check for platform to determine input source
         if self.platform == "android":
             try:
+                # --- ACCELEROMETER/GYRO INPUT ---
                 accel = accelerometer.acceleration
+                
                 if accel and all(a is not None for a in accel):
                     x, y, z = accel
-                    ay = -y * 0.3  # ← 横だけ反映、縦方向は無視
-                    ax += self.gravity  # ← 常に重力だけ適用
-                    # --- ジャイロで砲塔角度変更 ---
-                    if x > 1:
+                    
+                    # --- TANK MOVEMENT (Horizontal Control) ---
+                    # PROBLEM REMAINS: Device X/Y mapping is often counter-intuitive in landscape.
+                    # Try X-axis first (Roll):
+                    # ax = x * 0.3  
+                    
+                    # --- TEST 1: Try the Y-axis (Pitch) for horizontal movement ---
+                    # In some landscape modes, the Y-axis represents left/right tilt.
+                    # Use a negative sign to ensure movement is intuitive (tilt left moves tank left).
+                    # Adjust the 0.3 multiplier if tank movement is too slow.
+                    ax = y * 0.3 # Using Y-axis with increased sensitivity (0.5)
+
+                    # --- CANNON ROTATION (Controlled via X-axis tilt) ---
+                    # Use the X-axis (Roll/Forward-Backward Tilt) for cannon.
+                    if x > 1.5:  # Tilt forward/backward (up)
                         tank.rotate_cannon(+self.cannon_angle_speed)
-                    elif x < -1:
+                    elif x < -1.5:  # Tilt forward/backward (down)
                         tank.rotate_cannon(-self.cannon_angle_speed)
+                    
+                    # --- VERTICAL ACCELERATION (Gravity) ---
+                    ay += self.gravity
+                    
                 else:
-                    ax += self.gravity
+                    # If accelerometer data is unavailable, only apply gravity
+                    ay += self.gravity 
             except Exception:
-                ax += self.gravity
+                # Handle plyer/accelerometer initialization errors
+                ay += self.gravity
+                
+        # --- Desktop/Keyboard Control (Original logic retained) ---
         else:
             if 'left' in self._keys: ax -= 0.3
             if 'right' in self._keys: ax += 0.3
@@ -198,57 +221,57 @@ class GameWidgetBase(Widget):
                 tank.rotate_cannon(-self.cannon_angle_speed)
             ay += self.gravity
 
-        # --- 速度更新 ---
+        # --- 速度更新 (Update Velocity) ---
         self.vx += ax
         self.vy += ay
         self.vx *= self.friction
         self.vy *= self.friction
 
-        # --- 位置更新（今のターンのタンクだけ動かす）---
+        # --- 位置更新（今のターンのタンクだけ動かす）(Update Position) ---
         new_x = tank.x + self.vx
         new_y = tank.y + self.vy
         tank_w, tank_h = tank.size
 
-        # --- 画面端補正 ---
+        # --- 画面端補正 (Screen Edge Correction) ---
         if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
         elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
         if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
         elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-        # --- 壁との衝突 ---
+        # --- 壁との衝突 (Wall Collision) ---
         for wall in self.walls:
             wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
             if (new_x < wx + ww and new_x + tank_w > wx and
                 new_y < wy + wh and new_y + tank_h > wy):
                 
-                # 前フレーム位置
+                # 前フレーム位置 (Previous frame position)
                 prev_x = tank.x
                 prev_y = tank.y
-        
-                # 横からぶつかったか？
-                if prev_x + tank_w <= wx:  # 左から右へ衝突
+                
+                # 横からぶつかったか？ (Collision from side?)
+                if prev_x + tank_w <= wx:  # 左から右へ衝突 (Collision left to right)
                     new_x = wx - tank_w
                     self.vx = -self.vx * self.bounce
-                elif prev_x >= wx + ww:   # 右から左へ衝突
+                elif prev_x >= wx + ww:  # 右から左へ衝突 (Collision right to left)
                     new_x = wx + ww
                     self.vx = -self.vx * self.bounce
-        
-                # 縦からぶつかったか？
-                if prev_y + tank_h <= wy:  # 下から上へ衝突
+                
+                # 縦からぶつかったか？ (Collision from top/bottom?)
+                if prev_y + tank_h <= wy:  # 下から上へ衝突 (Collision bottom to top)
                     new_y = wy - tank_h
                     self.vy = -self.vy * self.bounce
-                elif prev_y >= wy + wh:   # 上から下へ衝突
+                elif prev_y >= wy + wh:  # 上から下へ衝突 (Collision top to bottom)
                     new_y = wy + wh
                     self.vy = -self.vy * self.bounce
-                
-        # --- 左右自動反転 ---
+                    
+        # --- 左右自動反転 (Automatic Horizontal Flip) ---
         if self.vx > 0.1 and tank.facing_left:
             tank.flip_horizontal(False)
         elif self.vx < -0.1 and not tank.facing_left:
             tank.flip_horizontal(True)
 
         tank.pos = (new_x, new_y)
-
+    
     # --- キー入力 ---
     def _on_key_down(self, window, key, scancode, codepoint, modifiers):
         self._keys.add(Window._system_keyboard.keycode_to_string(key))
