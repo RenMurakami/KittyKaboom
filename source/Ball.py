@@ -53,11 +53,7 @@ class Ball(Widget):
 
         # 2. Apply Position Update
         new_pos = self.pos[0] + self.velocity.x, self.pos[1] + self.velocity.y
-        old_x, old_y = self.x, self.y
-        
-        
-        
-        
+        old_x, old_y = self.x, self.y       
 
         # 3. Apply Friction (Air Resistance)
         self.velocity.x *= self.friction
@@ -82,8 +78,7 @@ class Ball(Widget):
             new_pos = (max(0, min(new_pos[0], self.parent.width - self.width)), new_pos[1])
             self.bounce_count += 1
 
-        # --- START OF NEW WALL COLLISION LOGIC ---
-
+        # 7. Check Wall collision
         # Test horizontal movement
         self.x = new_pos[0]
         collided_x = any(self.collide_widget(w) for w in walls)
@@ -108,22 +103,16 @@ class Ball(Widget):
         # Re-calculate new_pos based on corrected collision results
         new_pos = self.x, self.y 
         
-        # --- END OF NEW WALL COLLISION LOGIC ---
-
-
-
-        # 5. Check Termination Conditions (Two-Bounce Limit)
+        # 6. Check Termination Conditions (Two-Bounce Limit)
         if self.bounce_count >= self.bounce_limit:
             self.velocity = Vector(0, 0)
             self.fired = False # <--- MUST BE SET TO FALSE
             return # Stop processing
-        
-        # 6. Check Wall Collision (simplified, assuming walls are handled elsewhere or are complex)
-        # (Simplified wall logic omitted here for focus, but ensure your existing wall collision 
-        # doesn't prevent velocity from reaching zero.)
 
+        # 7. Apply new position
         self.pos = new_pos
         
+        # 8. Update ball color
         self.draw_gradient() 
         
     def draw_gradient(self):
