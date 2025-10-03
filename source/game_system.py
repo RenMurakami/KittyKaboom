@@ -94,12 +94,17 @@ class GameWidgetBase(Widget):
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         # --- Tanks (2 players) ---
+        
+        # Starting location
         self.full_tanks = [
-            FullTank(pos=(self.width * 0.15, self.height + 200)),
-            FullTank(pos=(self.width * 0.85, self.height + 200))
+            FullTank(pos=(self.width * 0.15, self.height * 5)), 
+            FullTank(pos=(self.width * 0.85, self.height * 5))   
         ]
         for tank in self.full_tanks:
             self.add_widget(tank)
+            
+        self.tank_vy = [0 for _ in self.full_tanks]
+        self.tank_target_y = [10, 10]
 
         # Adjust tank position/size when window resizes
         self.bind(size=self._initialize_tank_positions)
@@ -116,7 +121,7 @@ class GameWidgetBase(Widget):
         self.launch_speed = 20.0
         self.balls = []
         self.turn_timer = 10.0
-        self.turn_state = "INPUT"
+        self.turn_state = "START_DROP"
         self.cannon_angle_speed = 1.0
 
         # --- Turn label ---
@@ -158,17 +163,14 @@ class GameWidgetBase(Widget):
 
     # --- Tank Setup ---
     def _initialize_tank_positions(self, instance, value):
-        """Adjust tank sizes and positions when screen size changes."""
+        """Adjust tank sizes when screen resizes. Do NOT move Y during drop."""
         tank_h = self.height * 0.10
-        tank_w = tank_h * 1.5  # Keep 1.5:1 aspect ratio
+        tank_w = tank_h * 1.5  # 1.5:1 aspect ratio
         tank_size = (tank_w, tank_h)
 
-        for tank in self.full_tanks:
-            tank.size = tank_size
-
-        base_y = 10
-        self.full_tanks[0].pos = (self.width * 0.15 - tank_w / 2, base_y)
-        self.full_tanks[1].pos = (self.width * 0.85 - tank_w / 2, base_y)
+        for i, tank in enumerate(self.full_tanks):
+            tank.size = (tank_w, tank_h)
+            tank.x = self.width * (0.15 if i == 0 else 0.85) - tank_w / 2
 
         self.full_tanks[0].flip_horizontal(False)
         self.full_tanks[1].flip_horizontal(True)
@@ -242,6 +244,33 @@ class GameWidgetBase(Widget):
     def update_game_state(self, dt):
         ax = ay = 0
         tank = self.active_tank
+        
+        if self.turn_state == "START_DROP":
+            all_settled = True
+            for i, tank in enumerate(self.full_tanks):
+                self.tank_vy[i] += self.gravity
+                new_y = tank.y + self.tank_vy[i]
+
+                # Check collisions with floor or walls
+                collision_y = 1  # floor
+                for wall in self.walls:
+                    wx, wy, ww, wh = wall.pos[0], wall.pos[1], wall.size[0], wall.size[1]
+                    if (tank.x + tank.width > wx and tank.x < wx + ww) and (new_y <= wy + wh <= tank.y):
+                        collision_y = max(collision_y, wy + wh)
+
+                if new_y <= collision_y:
+                    new_y = collision_y
+                    self.tank_vy[i] = 0
+                else:
+                    all_settled = False
+
+                tank.y = new_y
+
+            if all_settled:
+                self.turn_state = "INPUT"
+                self.vx = self.vy = 0
+                self.turn_timer = 10.0
+                self.active_tank = self.full_tanks[self.current_turn]
 
         # --- Turn timer ---
         if self.turn_state == "INPUT":
@@ -269,8 +298,8 @@ class GameWidgetBase(Widget):
                     pass
             else:
                 # Keyboard controls
-                if "left" in self._keys:  ax -= 2.0
-                if "right" in self._keys: ax += 2.0
+                if "left" in self._keys:  ax -= 1.0
+                if "right" in self._keys: ax += 1.0
                 if "up" in self._keys:    tank.rotate_cannon(+self.cannon_angle_speed)
                 if "down" in self._keys:  tank.rotate_cannon(-self.cannon_angle_speed)
 
