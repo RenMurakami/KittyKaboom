@@ -9,7 +9,8 @@ class Wall(Widget):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         with self.canvas:
-            Color(0.5, 0.5, 0.5, 1)  # Solid gray color
+            # Reverting color back to solid gray
+            Color(0.5, 0.5, 0.5, 1)  
             self.rect = Rectangle(pos=self.pos, size=self.size)
 
         self.bind(pos=self.update_rect, size=self.update_rect)
