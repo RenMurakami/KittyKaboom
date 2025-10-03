@@ -23,7 +23,11 @@ class BaseStage(Screen):
     """
     def on_enter(self, *args):
         # Create game widget
-        self.game = GameWidgetBase()
+        p1_color = self.manager.p1_tank_color if hasattr(self.manager, 'p1_tank_color') else 'red'
+        p2_color = self.manager.p2_tank_color if hasattr(self.manager, 'p2_tank_color') else 'blue'
+
+        
+        self.game = GameWidgetBase(p1_color,p2_color)
         self.add_widget(self.game)
 
         # Back button
@@ -84,7 +88,7 @@ class GameWidgetBase(Widget):
     LOG_Y_START = 10
     LOG_LINE_HEIGHT = 20
 
-    def __init__(self, **kwargs):
+    def __init__(self, p1_color='red', p2_color='blue',  **kwargs):
         super().__init__(**kwargs)
 
         # --- Background ---
@@ -94,12 +98,13 @@ class GameWidgetBase(Widget):
         self.bind(pos=self._update_bg, size=self._update_bg)
 
         # --- Tanks (2 players) ---
+        # --- FullTank Instances (Set Colors Here) ---
+        tank1 = FullTank(p1_color,pos=(0, 0))
+
+        tank2 = FullTank(p2_color,pos=(0, 0))
         
-        # Starting location
-        self.full_tanks = [
-            FullTank(pos=(self.width * 0.15, self.height * 5)), 
-            FullTank(pos=(self.width * 0.85, self.height * 5))   
-        ]
+        self.full_tanks = [tank1, tank2] 
+
         for tank in self.full_tanks:
             self.add_widget(tank)
             
@@ -298,8 +303,8 @@ class GameWidgetBase(Widget):
                     pass
             else:
                 # Keyboard controls
-                if "left" in self._keys:  ax -= 1.0
-                if "right" in self._keys: ax += 1.0
+                if "left" in self._keys:  ax -= 0.2
+                if "right" in self._keys: ax += 0.2
                 if "up" in self._keys:    tank.rotate_cannon(+self.cannon_angle_speed)
                 if "down" in self._keys:  tank.rotate_cannon(-self.cannon_angle_speed)
 

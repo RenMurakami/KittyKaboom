@@ -145,7 +145,7 @@ class WelcomeScreen(Screen):
             image_source=paw_path,
             text="Start Game",
         )
-        self.start_button.bind(on_press=lambda *a: self.change_scene("stage1_1"))
+        self.start_button.bind(on_press=lambda *a: self.change_scene("tank_select" ))
         layout.add_widget(self.start_button)
 
         # Paw stamp (animated)

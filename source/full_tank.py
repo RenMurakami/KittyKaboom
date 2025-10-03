@@ -7,12 +7,12 @@ from kivy.graphics import PushMatrix, PopMatrix, Scale, Rotate
 class FullTank(Widget):
     """Tank widget with a body and a rotatable cannon, supporting horizontal flip."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, color, **kwargs):
         super().__init__(**kwargs)
         self.size = (100, 100)
 
         # Paths
-        base_path = os.path.join(os.path.dirname(__file__), "resource", "tankImage", "red")
+        base_path = os.path.join(os.path.dirname(__file__), "resource", "tankImage", color)
         body_path = os.path.join(base_path, "body.png")
         cannon_path = os.path.join(base_path, "cannon.png")
 
