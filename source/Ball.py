@@ -78,31 +78,48 @@ class Ball(Widget):
             new_pos = (max(0, min(new_pos[0], self.parent.width - self.width)), new_pos[1])
             self.bounce_count += 1
 
-        # 7. Check Wall collision
-        # Test horizontal movement
+        # 7. Check Wall collision with destructible walls
+        # Horizontal movement
         self.x = new_pos[0]
-        collided_x = any(self.collide_widget(w) for w in walls)
-        if collided_x:
-            self.x = old_x # Revert position
-            self.velocity.x *= -bounce_factor
-            self.bounce_count += 1
-        
-        # Test vertical movement
+
+        for wall in walls:
+            # If wall is destructible
+            if hasattr(wall, "blocks"):
+                for block in wall.blocks[:]:  # copy to avoid modifying while iterating
+                    if self.collide_widget(block):
+                        # Destroy the block at ball's position
+                        wall.destroy_at(self.center, radius=15)
+                        
+                        # Bounce horizontally
+                        self.x = old_x
+                        self.velocity.x *= -bounce_factor
+                        self.bounce_count += 1
+                        break  # only one block per frame
+
+        # Vertical movement
         self.y = new_pos[1]
-        collided_y = any(self.collide_widget(w) for w in walls)
-        if collided_y:
-            self.y = old_y # Revert position
-            self.velocity.y *= -bounce_factor
-            
-            # Additional logic to handle "settling" on a horizontal wall 
-            if abs(self.velocity.y) < 1:
-                self.velocity.y = 0
-            
-            self.bounce_count += 1
-            
+
+        for wall in walls:
+            if hasattr(wall, "blocks"):
+                for block in wall.blocks[:]:
+                    if self.collide_widget(block):
+                        # Destroy the block at ball's position
+                        wall.destroy_at(self.center, radius=15)
+                        
+                        # Bounce vertically
+                        self.y = old_y
+                        self.velocity.y *= -bounce_factor
+                        
+                        # Optional: stop if settling
+                        if abs(self.velocity.y) < 1:
+                            self.velocity.y = 0
+                        
+                        self.bounce_count += 1
+                        break
+
         # Re-calculate new_pos based on corrected collision results
-        new_pos = self.x, self.y 
-        
+        new_pos = self.x, self.y
+                
         # 6. Check Termination Conditions (Two-Bounce Limit)
         if self.bounce_count >= self.bounce_limit:
             self.velocity = Vector(0, 0)
@@ -196,7 +213,7 @@ class Ball(Widget):
                  self.velocity = Vector(0, 0)
                  self.fired = False 
                  
-                # --- NEW: Two-Bounce Limit ---
+        # --- NEW: Two-Bounce Limit ---
         if self.bounce_count >= 2:
             self.velocity = Vector(0, 0)
             self.fired = False  # Signal end of turn and removal

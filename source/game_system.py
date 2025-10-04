@@ -99,9 +99,8 @@ class GameWidgetBase(Widget):
 
         # --- Tanks (2 players) ---
         # --- FullTank Instances (Set Colors Here) ---
-        tank1 = FullTank(p1_color,pos=(0, 0))
-
-        tank2 = FullTank(p2_color,pos=(0, 0))
+        tank1 = FullTank(p1_color,pos=(self.width * 0.15, self.height * 10))  
+        tank2 = FullTank(p2_color,pos=(self.width * 0.85, self.height * 10))  
         
         self.full_tanks = [tank1, tank2] 
 
@@ -165,22 +164,44 @@ class GameWidgetBase(Widget):
         self._keys = set()
         if self.platform != "android":
             Window.bind(on_key_down=self._on_key_down, on_key_up=self._on_key_up)
+            
 
     # --- Tank Setup ---
     def _initialize_tank_positions(self, instance, value):
-        """Adjust tank sizes when screen resizes. Do NOT move Y during drop."""
+        """Adjust tank sizes when screen resizes.
+        If the turn_state is START_DROP, position tanks above the top edge
+        so they fall in. Otherwise place them on the ground.
+        """
         tank_h = self.height * 0.10
         tank_w = tank_h * 1.5  # 1.5:1 aspect ratio
-        tank_size = (tank_w, tank_h)
 
         for i, tank in enumerate(self.full_tanks):
             tank.size = (tank_w, tank_h)
+            # X position (left / right)
             tank.x = self.width * (0.15 if i == 0 else 0.85) - tank_w / 2
 
+            # Y: if we're about to drop, put the tanks above the screen top
+            if getattr(self, "turn_state", None) == "START_DROP":
+                # place them well above the top so they visibly fall
+                tank.y = self.height + 150 + i * 40  # stagger slightly to avoid overlap
+                # reset per-tank vertical velocity for fresh drop
+                if len(self.tank_vy) > i:
+                    self.tank_vy[i] = 0
+                else:
+                    # ensure list long enough
+                    while len(self.tank_vy) <= i:
+                        self.tank_vy.append(0)
+            else:
+                # normal ground placement
+                base_y = 10
+                tank.y = base_y
+
+        # set facing
         self.full_tanks[0].flip_horizontal(False)
         self.full_tanks[1].flip_horizontal(True)
 
         self._reposition_ui()
+
 
     def _switch_turn(self, dt):
         """Switch control to the next tank."""
@@ -245,6 +266,41 @@ class GameWidgetBase(Widget):
     def flush(self):
         pass
 
+    def move_with_collision(self, tank, dx, dy, blocks):
+        steps = int(max(abs(dx), abs(dy)) // 1) + 1
+        step_x = dx / steps
+        step_y = dy / steps
+        new_x, new_y = tank.x, tank.y
+
+        # Horizontal
+        for _ in range(steps):
+            new_x += step_x
+            tank.x = new_x
+            for b in blocks:
+                if tank.collide_widget(b):
+                    # allow horizontal movement if tank is clearly above the block
+                    if tank.y >= b.top - 2:
+                        continue
+                    new_x -= step_x
+                    tank.x = new_x
+                    self.vx *= -self.bounce
+                    break
+
+        # Vertical
+        for _ in range(steps):
+            new_y += step_y
+            tank.y = new_y
+            for b in blocks:
+                if tank.collide_widget(b):
+                    new_y -= step_y
+                    tank.y = new_y
+                    self.vy *= -self.bounce
+                    break
+
+        return new_x, new_y
+
+
+
     # --- Game Loop ---
     def update_game_state(self, dt):
         ax = ay = 0
@@ -252,17 +308,32 @@ class GameWidgetBase(Widget):
         
         if self.turn_state == "START_DROP":
             all_settled = True
+
+            # build list of all block widgets from all walls (may be empty)
+            all_blocks = [b for wall in self.walls for b in getattr(wall, "blocks", [])]
+
             for i, tank in enumerate(self.full_tanks):
+                # simulate per-tank vertical velocity (vy positive up, gravity is negative)
                 self.tank_vy[i] += self.gravity
+                # small timestep scale so fall speed is not huge on first frame
                 new_y = tank.y + self.tank_vy[i]
 
-                # Check collisions with floor or walls
-                collision_y = 1  # floor
-                for wall in self.walls:
-                    wx, wy, ww, wh = wall.pos[0], wall.pos[1], wall.size[0], wall.size[1]
-                    if (tank.x + tank.width > wx and tank.x < wx + ww) and (new_y <= wy + wh <= tank.y):
-                        collision_y = max(collision_y, wy + wh)
+                # default floor collision
+                collision_y = 1
 
+                # check collision against blocks (not the wall container)
+                for block in all_blocks:
+                    bx, by = block.pos
+                    bw, bh = block.size
+                    # top of block
+                    top_of_block = by + bh
+                    # horizontal overlap between tank and block?
+                    if (tank.x + tank.width > bx) and (tank.x < bx + bw):
+                        # is the tank passing through the top of the block this frame?
+                        if new_y <= top_of_block <= tank.y:
+                            collision_y = max(collision_y, top_of_block)
+
+                # land if collided with anything; otherwise still falling
                 if new_y <= collision_y:
                     new_y = collision_y
                     self.tank_vy[i] = 0
@@ -271,11 +342,13 @@ class GameWidgetBase(Widget):
 
                 tank.y = new_y
 
+            # when all tanks have settled, switch to input state
             if all_settled:
                 self.turn_state = "INPUT"
                 self.vx = self.vy = 0
                 self.turn_timer = 10.0
                 self.active_tank = self.full_tanks[self.current_turn]
+
 
         # --- Turn timer ---
         if self.turn_state == "INPUT":
@@ -331,27 +404,11 @@ class GameWidgetBase(Widget):
         if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
         elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-        # Wall collisions
-        for wall in self.walls:
-            wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
-            if (new_x < wx + ww and new_x + tank_w > wx and
-                new_y < wy + wh and new_y + tank_h > wy):
+        # Tank vs wall block collisions
+        all_blocks = [b for wall in self.walls for b in wall.blocks]
+        new_x, new_y = self.move_with_collision(tank, self.vx, self.vy, all_blocks)
+        tank.pos = (new_x, new_y)
 
-                prev_x, prev_y = tank.x, tank.y
-
-                if prev_x + tank_w <= wx:
-                    new_x = wx - tank_w
-                    self.vx = -self.vx * self.bounce
-                elif prev_x >= wx + ww:
-                    new_x = wx + ww
-                    self.vx = -self.vx * self.bounce
-
-                if prev_y + tank_h <= wy:
-                    new_y = wy + wh
-                    self.vy = -self.vy * self.bounce
-                elif prev_y >= wy + wh:
-                    new_y = wy + wh
-                    self.vy = -self.vy * self.bounce
 
         # Auto-flip tank based on velocity
         if self.vx > 0.1 and tank.facing_left:
@@ -364,9 +421,17 @@ class GameWidgetBase(Widget):
         # --- Ball updates ---
         balls_to_remove = []
         for ball in self.balls:
+            # 1️⃣ First move/update the ball
             ball.update(dt, self.walls, self.bounce)
+
+            # 2️⃣ Destroy wall blocks hit by this ball
+            for wall in self.walls:
+                wall.destroy_at(ball.center, radius=ball.width/2)
+
+            # 3️⃣ Remove ball if it has settled
             if not ball.fired:
                 balls_to_remove.append(ball)
+
 
         if balls_to_remove and self.turn_state == "FIRING":
             for ball in balls_to_remove:
