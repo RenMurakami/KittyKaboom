@@ -13,7 +13,7 @@ import math
 import sys
 
 from full_tank import FullTank
-from Ball import Ball
+from ball import Ball
 
 
 class BaseStage(Screen):
