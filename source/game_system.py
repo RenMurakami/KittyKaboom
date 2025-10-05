@@ -223,7 +223,6 @@ class GameWidgetBase(Widget):
 
     # --- Ball Launch ---
     def launch_ball(self):
-        """Launch a ball from the active tank."""
         tank = self.active_tank
         angle_rad = math.radians(tank.cannon_angle)
 
@@ -233,15 +232,22 @@ class GameWidgetBase(Widget):
         if tank.facing_left:
             vx *= -1
 
-        new_ball = Ball(pos=(tank.center_x, tank.center_y))
+        # --- FIXED: spawn ball just outside the cannon
+        offset_distance = tank.width * 0.6  # distance from tank center
+        spawn_x = tank.center_x + math.cos(angle_rad) * offset_distance * (-1 if tank.facing_left else 1)
+        spawn_y = tank.center_y + math.sin(angle_rad) * offset_distance
+
+        new_ball = Ball(pos=(spawn_x, spawn_y))
         new_ball.velocity = Vector(vx, vy)
         new_ball.gravity_scale = self.gravity
         new_ball.fired = True
+        new_ball.owner = tank  # so it doesn’t kill its own tank
 
         self.balls.append(new_ball)
         self.add_widget(new_ball)
 
         print(f"💥 FIRE! Angle: {tank.cannon_angle}° | Vx: {vx:.1f}, Vy: {vy:.1f}")
+
 
     # --- Background update ---
     def _update_bg(self, *args):
@@ -299,7 +305,29 @@ class GameWidgetBase(Widget):
 
         return new_x, new_y
 
+    def game_over(self, tank, ball):
+        """Handle game over when a tank is hit by a ball."""
+        print(f"💀 Game Over! {tank.color_name} tank was hit!")
 
+        # Stop the game loop
+        Clock.unschedule(self.update_game_state)
+
+        # Visual indicator (optional)
+        with tank.canvas.after:
+            Color(1, 0, 0, 0.5)
+            tank.width = tank.width * 0.6
+            tank.height = tank.height * 0.6
+            Rectangle(pos=tank.pos, size=tank.size)
+
+        # Optionally show a label
+        self.add_widget(Label(
+            text="GAME OVER",
+            font_size=48,
+            color=(1, 0, 0, 1),
+            size_hint=(None, None),
+            size=(400, 100),
+            pos=(self.width/2 - 200, self.height/2 - 50)
+        ))
 
     # --- Game Loop ---
     def update_game_state(self, dt):
@@ -421,14 +449,20 @@ class GameWidgetBase(Widget):
         # --- Ball updates ---
         balls_to_remove = []
         for ball in self.balls:
-            # 1️⃣ First move/update the ball
+            # 1️⃣ Ball movement
             ball.update(dt, self.walls, self.bounce)
 
-            # 2️⃣ Destroy wall blocks hit by this ball
+            # 2️⃣ Check tank collisions
+            for tank in self.full_tanks:
+                if tank.collide_widget(ball):
+                    self.game_over(tank, ball)
+                    return  # stop game immediately
+
+            # 3️⃣ Destroy wall blocks
             for wall in self.walls:
                 wall.destroy_at(ball.center, radius=ball.width/2)
 
-            # 3️⃣ Remove ball if it has settled
+            # 4️⃣ Ball settled
             if not ball.fired:
                 balls_to_remove.append(ball)
 

@@ -15,6 +15,7 @@ class FullTank(Widget):
         base_path = os.path.join(os.path.dirname(__file__), "resource", "tankImage", color)
         body_path = os.path.join(base_path, "body.png")
         cannon_path = os.path.join(base_path, "cannon.png")
+        self.color_name = color
 
         # Tank body
         self.body = Image(source=body_path, fit_mode="contain")
@@ -71,3 +72,18 @@ class FullTank(Widget):
         """Rotate cannon within -80° to +80°."""
         self.cannon_angle = max(-80, min(80, self.cannon_angle + delta_angle))
         self._cannon_rotate.angle = self.cannon_angle
+
+    def collide_widget(self, other_widget):
+            """Use circular collision instead of rectangular."""
+            tank_center = self.center
+            ball_center = other_widget.center
+
+            tank_radius = min(self.width, self.height) * 0.6  # adjust factor to shrink
+            ball_radius = max(other_widget.width, other_widget.height) * 0.5
+
+            dx = tank_center[0] - ball_center[0]
+            dy = tank_center[1] - ball_center[1]
+            distance = (dx**2 + dy**2) ** 0.5
+
+            return distance < (tank_radius + ball_radius)
+        
