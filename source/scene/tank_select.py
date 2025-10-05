@@ -1,3 +1,5 @@
+import os
+
 from kivy.uix.screenmanager import Screen
 from kivy.uix.carousel import Carousel
 from kivy.uix.image import Image
@@ -5,7 +7,6 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.metrics import dp
-from kivy.properties import ListProperty, NumericProperty, StringProperty
 from kivy.clock import Clock
 
 class TankCarousel(Carousel):
@@ -14,23 +15,26 @@ class TankCarousel(Carousel):
     The current tank is full size; tanks moving away shrink.
     """
     TANK_COLORS = ['red', 'yellow', 'green', 'blue']
-    RESOURCE_PATH = 'source/resource/tankImage/{}/full.png'
-
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.direction = 'right' # Set initial rotation direction
         self.bind(index=self.update_tank_size)
-
+        
         # Create Image widgets for each tank
         for color in self.TANK_COLORS:
+            base_path = os.path.join(os.path.dirname(__file__), "..", "resource", "tankImage", color)
+            tank_path = os.path.join(base_path, "body.png")
+            tank_path = os.path.abspath(tank_path) 
+
             tank_image = Image(
-                source=self.RESOURCE_PATH.format(color),
+                source=tank_path,
                 size_hint=(None, None),
                 allow_stretch=True,
                 keep_ratio=True
             )
             self.add_widget(tank_image)
-        
+
         # Initial size update needs to happen after widgets are added
         Clock.schedule_once(lambda dt: self.update_tank_size(), 0)
 
