@@ -99,8 +99,8 @@ class GameWidgetBase(Widget):
 
         # --- Tanks (2 players) ---
         # --- FullTank Instances (Set Colors Here) ---
-        tank1 = FullTank(p1_color,pos=(self.width * 0.15, self.height * 10))  
-        tank2 = FullTank(p2_color,pos=(self.width * 0.85, self.height * 10))  
+        tank1 = FullTank(p1_color,pos=(self.width * 0.15, self.height))  
+        tank2 = FullTank(p2_color,pos=(self.width * 0.85, self.height))  
         
         self.full_tanks = [tank1, tank2] 
 
@@ -216,7 +216,6 @@ class GameWidgetBase(Widget):
 
     # --- Ball Launch ---
     def launch_ball(self):
-        """Launch a ball from the active tank."""
         tank = self.active_tank
         angle_rad = math.radians(tank.cannon_angle)
 
@@ -226,15 +225,22 @@ class GameWidgetBase(Widget):
         if tank.facing_left:
             vx *= -1
 
-        new_ball = Ball(pos=(tank.center_x, tank.center_y))
+        # --- Spawn Ball just outside the Cannon
+        offset_distance = tank.width * 0.6  # distance from tank center
+        spawn_x = tank.center_x + math.cos(angle_rad) * offset_distance * (-1 if tank.facing_left else 1)
+        spawn_y = tank.center_y + math.sin(angle_rad) * offset_distance
+
+        new_ball = Ball(pos=(spawn_x, spawn_y))
         new_ball.velocity = Vector(vx, vy)
         new_ball.gravity_scale = self.gravity
         new_ball.fired = True
+        new_ball.owner = tank  # so it doesn’t kill its own tank
 
         self.balls.append(new_ball)
         self.add_widget(new_ball)
 
         print(f"💥 FIRE! Angle: {tank.cannon_angle}° | Vx: {vx:.1f}, Vy: {vy:.1f}")
+
 
     # --- Background update ---
     def _update_bg(self, *args):
@@ -258,6 +264,31 @@ class GameWidgetBase(Widget):
 
     def flush(self):
         pass
+
+    def game_over(self, tank, ball):
+        """Handle game over when a tank is hit by a ball."""
+        print(f"💀 Game Over! {tank.color_name} tank was hit!")
+
+        # Stop the game loop
+        Clock.unschedule(self.update_game_state)
+
+        # Visual indicator (optional)
+        with tank.canvas.after:
+            Color(1, 0, 0, 0.5)
+            tank.width = tank.width * 0.6
+            tank.height = tank.height * 0.6
+            Rectangle(pos=tank.pos, size=tank.size)
+
+        # Optionally show a label
+        self.add_widget(Label(
+            text="GAME OVER",
+            font_size=48,
+            color=(1, 0, 0, 1),
+            size_hint=(None, None),
+            size=(400, 100),
+            pos=(self.width/2 - 200, self.height/2 - 50)
+        ))
+
 
     # --- Game Loop ---
     def update_game_state(self, dt):
@@ -322,63 +353,94 @@ class GameWidgetBase(Widget):
                 if "up" in self._keys:    tank.rotate_cannon(+self.cannon_angle_speed)
                 if "down" in self._keys:  tank.rotate_cannon(-self.cannon_angle_speed)
 
-                if "space" in self._keys:
-                    self.launch_ball()
-                    self.turn_state = "FIRING"
-                    self.vx = self.vy = 0
-                    self._keys.discard("space")
+            # --- Physics ---
+            ay += self.gravity
+            self.vx += ax
+            self.vy += ay
+            self.vx *= self.friction
+            self.vy *= self.friction
 
-        # --- Physics ---
-        ay += self.gravity
-        self.vx += ax
-        self.vy += ay
-        self.vx *= self.friction
-        self.vy *= self.friction
+            new_x = tank.x + self.vx
+            new_y = tank.y + self.vy
+            tank_w, tank_h = tank.size
 
-        new_x = tank.x + self.vx
-        new_y = tank.y + self.vy
-        tank_w, tank_h = tank.size
+            # Screen boundaries
+            if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
+            elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
+            if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
+            elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-        # Screen boundaries
-        if new_x < 0: new_x, self.vx = 0, -self.vx * self.bounce
-        elif new_x + tank_w > self.width: new_x, self.vx = self.width - tank_w, -self.vx * self.bounce
-        if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
-        elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
+            # Wall collisions
+            """for wall in self.walls:
+                wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
+                if (new_x < wx + ww and new_x + tank_w > wx and
+                    new_y < wy + wh and new_y + tank_h > wy):
 
-        # Wall collisions
-        for wall in self.walls:
-            wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
-            if (new_x < wx + ww and new_x + tank_w > wx and
-                new_y < wy + wh and new_y + tank_h > wy):
+                    prev_x, prev_y = tank.x, tank.y
 
-                prev_x, prev_y = tank.x, tank.y
+                    if prev_x + tank_w <= wx:
+                        new_x = wx - tank_w
+                        self.vx = -self.vx * self.bounce
+                    elif prev_x >= wx + ww:
+                        new_x = wx + ww
+                        self.vx = -self.vx * self.bounce
 
-                if prev_x + tank_w <= wx:
-                    new_x = wx - tank_w
-                    self.vx = -self.vx * self.bounce
-                elif prev_x >= wx + ww:
-                    new_x = wx + ww
-                    self.vx = -self.vx * self.bounce
+                    if prev_y + tank_h <= wy:
+                        new_y = wy + wh
+                        self.vy = -self.vy * self.bounce
+                    elif prev_y >= wy + wh:
+                        new_y = wy + wh
+                        self.vy = -self.vy * self.bounce"""
+                        
+            # --- Tank vs Wall Collision ---
+            for wall in self.walls:
+                # Check if wall has destructible blocks
+                if hasattr(wall, "blocks"):
+                    for block in wall.blocks[:]:
+                        if tank.collide_widget(block):                            
+                            # Basic bounce or stop effect
+                            # Determine horizontal or vertical collision
+                            if abs((tank.center_x - block.center_x)) > abs((tank.center_y - block.center_y)):
+                                # Horizontal collision
+                                self.vx *= -self.bounce
+                                if tank.center_x < block.center_x:
+                                    new_x = block.x - tank.width
+                                else:
+                                    new_x = block.right
+                            else:
+                                # Vertical collision
+                                self.vy *= -self.bounce
+                                if tank.center_y < block.center_y:
+                                    new_y = block.y - tank.height
+                                else:
+                                    new_y = block.top
 
-                if prev_y + tank_h <= wy:
-                    new_y = wy + wh
-                    self.vy = -self.vy * self.bounce
-                elif prev_y >= wy + wh:
-                    new_y = wy + wh
-                    self.vy = -self.vy * self.bounce
 
-        # Auto-flip tank based on velocity
-        if self.vx > 0.1 and tank.facing_left:
-            tank.flip_horizontal(False)
-        elif self.vx < -0.1 and not tank.facing_left:
-            tank.flip_horizontal(True)
+            # Auto-flip tank based on velocity
+            if self.vx > 0.1 and tank.facing_left:
+                tank.flip_horizontal(False)
+            elif self.vx < -0.1 and not tank.facing_left:
+                tank.flip_horizontal(True)
 
-        tank.pos = (new_x, new_y)
+            tank.pos = (new_x, new_y)
 
         # --- Ball updates ---
         balls_to_remove = []
         for ball in self.balls:
+            # 1️⃣ Ball movement
             ball.update(dt, self.walls, self.bounce)
+
+            # 2️⃣ Check tank collisions
+            for tank in self.full_tanks:
+                if tank.collide_widget(ball):
+                    self.game_over(tank, ball)
+                    return  # stop game immediately
+
+            # 3️⃣ Destroy wall blocks
+            for wall in self.walls:
+                wall.destroy_at(ball.center, radius=ball.width/2)
+
+            # 4️⃣ Ball settled
             if not ball.fired:
                 balls_to_remove.append(ball)
 
@@ -396,3 +458,4 @@ class GameWidgetBase(Widget):
 
     def _on_key_up(self, window, key, *args):
         self._keys.discard(Window._system_keyboard.keycode_to_string(key))
+        

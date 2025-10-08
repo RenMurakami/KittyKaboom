@@ -42,6 +42,7 @@ class FullTank(Widget):
         # State
         self.facing_left = False
         self.cannon_angle = 0
+        self.ready = False
 
         # Keep body and cannon synced with widget size/pos
         self.bind(pos=self._sync_images, size=self._sync_images)
@@ -74,16 +75,17 @@ class FullTank(Widget):
         self._cannon_rotate.angle = self.cannon_angle
 
     def collide_widget(self, other_widget):
-            """Use circular collision instead of rectangular."""
-            tank_center = self.center
-            ball_center = other_widget.center
+        """Use circular collision instead of rectangular."""
+        tank_center = self.center
+        other_center = other_widget.center
 
-            tank_radius = min(self.width, self.height) * 0.6  # adjust factor to shrink
-            ball_radius = max(other_widget.width, other_widget.height) * 0.5
+        tank_radius = min(self.width, self.height) * 0.5
+        other_radius = max(other_widget.width, other_widget.height) * 0.5
 
-            dx = tank_center[0] - ball_center[0]
-            dy = tank_center[1] - ball_center[1]
-            distance = (dx**2 + dy**2) ** 0.5
+        dx = tank_center[0] - other_center[0]
+        dy = tank_center[1] - other_center[1]
+        distance = (dx**2 + dy**2) ** 0.5
 
-            return distance < (tank_radius + ball_radius)
+        return distance < (tank_radius + other_radius)
+
         
