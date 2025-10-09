@@ -24,7 +24,7 @@ class TankCarousel(Carousel):
         # Create Image widgets for each tank
         for color in self.TANK_COLORS:
             base_path = os.path.join(os.path.dirname(__file__), "..", "resource", "tankImage", color)
-            tank_path = os.path.join(base_path, "body.png")
+            tank_path = os.path.join(base_path, "full.png")
             tank_path = os.path.abspath(tank_path) 
 
             tank_image = Image(
