@@ -117,6 +117,9 @@ class GameWidgetBase(Widget):
         self.active_tank = self.full_tanks[self.current_turn]
 
         # --- Physics settings ---
+        self.base_height = 720
+        
+        self.scale_y = self.height / self.base_height
         self.vx, self.vy = 0, 0
         self.gravity = -9.8 * 0.05
         self.friction = 0.98
@@ -226,13 +229,13 @@ class GameWidgetBase(Widget):
             vx *= -1
 
         # --- Spawn Ball just outside the Cannon
-        offset_distance = tank.width * 0.6  # distance from tank center
+        offset_distance = tank.width * 0.6 * self.scale_y  # distance from tank center
         spawn_x = tank.center_x + math.cos(angle_rad) * offset_distance * (-1 if tank.facing_left else 1)
         spawn_y = tank.center_y + math.sin(angle_rad) * offset_distance
 
         new_ball = Ball(pos=(spawn_x, spawn_y))
         new_ball.velocity = Vector(vx, vy)
-        new_ball.gravity_scale = self.gravity
+        new_ball.gravity_scale = self.gravity * self.scale_y
         new_ball.fired = True
         new_ball.owner = tank  # so it doesn’t kill its own tank
 
@@ -246,6 +249,10 @@ class GameWidgetBase(Widget):
     def _update_bg(self, *args):
         self.bg_rect.pos = (0, 0)
         self.bg_rect.size = (self.width, self.height)
+        
+        self.scale_y = self.height / self.base_height
+        self.gravity = -9.8 * 0.05 * self.scale_y
+        self.launch_speed = 20.0 * self.scale_y
 
     # --- Logging ---
     def write(self, message):
@@ -324,7 +331,7 @@ class GameWidgetBase(Widget):
 
         # --- Turn timer ---
         if self.turn_state == "INPUT":
-            self.turn_timer -= dt
+            self.turn_timer -= dt * (self.scale_y)
             self.turn_label.text = f"Tank {self.current_turn + 1} Turn: {int(self.turn_timer)}s"
 
             if self.turn_timer <= 0:
