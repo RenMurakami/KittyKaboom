@@ -50,6 +50,10 @@ class Ball(Widget):
             
         # 1. Apply Gravity
         self.velocity.y += self.gravity_scale
+        '''self.pos = (
+            self.x + self.velocity.x,
+            self.y + self.velocity.y,
+        )'''
 
         # 2. Apply Position Update
         new_pos = self.pos[0] + self.velocity.x, self.pos[1] + self.velocity.y
