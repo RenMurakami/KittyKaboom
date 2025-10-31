@@ -5,19 +5,17 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.clock import Clock
 import threading
-import time
 
-from scene.game_client import GameClient
-from scene.game_server import GameServer
+from game_client import GameClient
+from game_server import GameServer
+from game_system import NetworkLink
 
 
 class OnlineSetup(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
         self.server = None
         self.client = None
-        self.server_thread = None
 
         # Layout
         layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
@@ -29,6 +27,7 @@ class OnlineSetup(Screen):
             hint_text="Enter room name or server IP",
             size_hint=(1, 0.2)
         )
+        self.room_input.text = "127.0.0.1"
         layout.add_widget(self.room_input)
 
         join_btn = Button(text="Join Room", size_hint=(1, 0.2))
@@ -45,60 +44,71 @@ class OnlineSetup(Screen):
 
         self.add_widget(layout)
 
+    # -----------------------------
+    # CLIENT SIDE
+    # -----------------------------
     def join_room(self, instance):
-        room_ip = self.room_input.text.strip()
-        if not room_ip:
-            self.info_label.text = "Enter server IP!"
+        """Start client connection in a background thread."""
+        self._update_label("Connecting to host...")
+        threading.Thread(target=self._connect_to_host, daemon=True).start()
+
+    def _connect_to_host(self):
+        try:
+            host_ip = self.room_input.text.strip()
+            self.client = GameClient(host=host_ip, port=12345)
+            network = NetworkLink(self.client.sock)
+
+            print("[CLIENT] Connected to host, switching to game...")
+            Clock.schedule_once(lambda dt: self._switch_to_game(network=network, is_host=False), 0)
+
+        except Exception as e:
+            err_msg = f"Failed to join: {e}"
+            Clock.schedule_once(lambda dt, msg=err_msg: self._update_label(msg), 0)
+
+    # -----------------------------
+    # HOST SIDE
+    # -----------------------------
+    def host_room(self, instance):
+        """Start server and wait for client connection in a background thread."""
+        self._update_label("Starting server...")
+        threading.Thread(target=self._start_server, daemon=True).start()
+
+    def _start_server(self):
+        try:
+            self.server = GameServer(port=12345)
+            self._update_label("Waiting for client to connect...")
+
+            # Accept only one client before switching to game
+            client_sock = self.server.accept_client()
+            network = NetworkLink(client_sock)
+            Clock.schedule_once(lambda dt: self._switch_to_game(network=network, is_host=True), 0)
+
+        except Exception as e:
+            err_msg = f"Failed to host: {e}"
+            Clock.schedule_once(lambda dt, msg=err_msg: self._update_label(msg), 0)
+
+
+    # -----------------------------
+    # GAME SWITCH
+    # -----------------------------
+    def _switch_to_game(self, network=None, is_host=True):
+        """Switch to the game screen with proper network setup."""
+        if not network:
+            print("[ERROR] Network object missing, cannot enter game.")
             return
 
-        self.info_label.text = f"Connecting to {room_ip}..."
-        threading.Thread(target=self._join_thread, args=(room_ip,), daemon=True).start()
+        game_screen = self.manager.get_screen("stage1_1")
+        game_screen.is_host = is_host
+        game_screen.network = network
 
-    def _join_thread(self, room_ip):
-        try:
-            self.client = GameClient(room_ip)
-            print("Connected to server, starting game (client side)")
-            Clock.schedule_once(lambda dt: self._switch_to_game(), 0)
-        except Exception as e:
-            Clock.schedule_once(lambda dt: self._update_label(f"Failed to join: {e}"), 0)
+        # Kivy automatically calls on_enter; do not call manually
+        self.manager.current = "stage1_1"
 
-    def host_room(self, instance):
-        port = 12345
-        try:
-            self.server = GameServer(port=port)
-            # Start a background thread to wait for clients
-            threading.Thread(target=self._wait_for_client, daemon=True).start()
-            print(f"Hosting game on port {port}")
-        except Exception as e:
-            print("Failed to host:", e)
-
-    def _host_thread(self, port):
-        try:
-            self.server = GameServer(port=port)
-            Clock.schedule_once(lambda dt: self._update_label(f"Waiting for client on port {port}..."), 0)
-            self.server.accept_clients()  # blocks until client connects
-
-            # When client connects, update UI on main thread
-            Clock.schedule_once(lambda dt: self._switch_to_game(), 0)
-
-            print("Client connected, starting game (server side)")
-        except Exception as e:
-            Clock.schedule_once(lambda dt: self._update_label(f"Failed to host: {e}"), 0)
-
+    # -----------------------------
+    # UTILS
+    # -----------------------------
     def _update_label(self, text):
         self.info_label.text = text
-        
-    def _wait_for_client(self):
-        self.server.sock.listen(1)
-        client, addr = self.server.sock.accept()
-        print(f"Client connected: {addr}")
-        self.server.client = client
-        # switch screen on main thread
-        Clock.schedule_once(lambda dt: self._switch_to_game(), 0)
-
-    def _switch_to_game(self):
-        self.info_label.text = "Connected!"
-        self.manager.current = "stage1_1"  # Switch to your game screen
 
     def go_back(self, instance):
         self.manager.current = "match_select"

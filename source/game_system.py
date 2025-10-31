@@ -10,6 +10,7 @@ from kivy.vector import Vector
 from kivy.graphics import Color, Rectangle
 from collections import deque
 import math
+import threading
 import sys
 
 from full_tank import FullTank
@@ -20,14 +21,18 @@ class BaseStage(Screen):
     """
     Base game stage screen.
     Handles setup, game loop, and accelerometer control on Android.
+    Supports server/client multiplayer.
     """
     def on_enter(self, *args):
         # Create game widget
         p1_color = self.manager.p1_tank_color if hasattr(self.manager, 'p1_tank_color') else 'red'
         p2_color = self.manager.p2_tank_color if hasattr(self.manager, 'p2_tank_color') else 'blue'
 
-        
-        self.game = GameWidgetBase(p1_color,p2_color)
+        # Multiplayer flags
+        self.is_host = getattr(self.manager, "is_host", True)  # default host
+        self.network = getattr(self.manager, "network", None)
+
+        self.game = GameWidgetBase(p1_color, p2_color, is_host=self.is_host, network=self.network)
         self.add_widget(self.game)
 
         # Back button
@@ -47,6 +52,30 @@ class BaseStage(Screen):
 
         # Run game loop at 60 FPS
         Clock.schedule_interval(self.game.update_game_state, 1.0 / 60.0)
+
+        # If multiplayer client, start listening thread
+        # In BaseStage.on_enter:
+        if self.network and not self.is_host:
+            threading.Thread(target=self._listen_server_updates, daemon=True).start()
+        elif self.network and self.is_host:
+            threading.Thread(target=self._listen_client_input, daemon=True).start()
+
+
+    def _listen_client_input(self):
+        """Host: listen to client inputs continuously in a separate thread"""
+        while True:
+            try:
+                msg = self.network.recv()
+                if msg and msg.startswith("INPUT"):
+                    _, keys = msg.split(" ", 1)
+                    self.game.apply_remote_input(keys)
+            except Exception as e:
+                print("⚠ Client input error:", e)
+
+    def update_game_state(self, dt):
+        """Default per-frame update for all stages."""
+        # Do whatever your game needs each frame
+        pass
 
     def _reposition_button(self, *args):
         """Reposition back button when window resizes."""
@@ -74,6 +103,50 @@ class BaseStage(Screen):
         Clock.unschedule(self.game.update_game_state)
         self.remove_widget(self.game)
 
+    def _listen_server_updates(self):
+        """Client: listen for host updates"""
+        while True:
+            msg = self.network.recv()
+            if msg and msg.startswith("STATE"):
+                try:
+                    _, x, y, angle = msg.split()
+                    def update(dt):
+                        tank = self.full_tanks[0]
+                        tank.x = float(x)
+                        tank.y = float(y)
+                        tank.cannon_angle = float(angle)
+                    Clock.schedule_once(update, 0)
+                except Exception as e:
+                    print("⚠ Failed to parse host state:", e)
+
+
+class NetworkLink:
+    def __init__(self, sock):
+        self.sock = sock
+        self.running = True
+        threading.Thread(target=self.listen_loop, daemon=True).start()
+
+    def send(self, msg):
+        if self.sock:
+            try:
+                self.sock.sendall(msg.encode())
+            except Exception as e:
+                print("[NETWORK] Send failed:", e)
+
+    def recv(self):
+        try:
+            return self.sock.recv(1024).decode()
+        except Exception as e:
+            print("[NETWORK] Receive failed:", e)
+            return None
+
+    def listen_loop(self):
+        while self.running:
+            data = self.recv()
+            if data:
+                print("[NETWORK] Received:", data)
+
+
 
 class GameWidgetBase(Widget):
     """
@@ -88,8 +161,10 @@ class GameWidgetBase(Widget):
     LOG_Y_START = 10
     LOG_LINE_HEIGHT = 20
 
-    def __init__(self, p1_color='red', p2_color='blue',  **kwargs):
+    def __init__(self, p1_color='red', p2_color='blue', is_host=True, network=None, **kwargs):
         super().__init__(**kwargs)
+        self.is_host = is_host
+        self.network = network
 
         # --- Background ---
         with self.canvas.before:
@@ -170,33 +245,21 @@ class GameWidgetBase(Widget):
 
     
     # --- Tank Setup ---
-    def _initialize_tank_positions(self, instance, value): 
-        """Adjust tank sizes when screen resizes. 
-        - At game start, tanks start above the screen.
-        - On resize, keep relative positions. """ 
-        tank_h = self.height * 0.10 
-        tank_w = tank_h * 1.5 # 1.5:1 aspect ratio 
-        for i, tank in enumerate(self.full_tanks): 
-            # Update size 
-            tank.size = (tank_w, tank_h) 
-            
-            # Update X based on percentage of screen width 
-            tank.x = self.width * (0.15 if i == 0 else 0.85) - tank_w / 2 
-            # Y-position: 
+    def _initialize_tank_positions(self, instance, value):
+        """Adjust tank sizes when screen resizes."""
+        tank_h = self.height * 0.10
+        tank_w = tank_h * 1.5
+        for i, tank in enumerate(self.full_tanks):
+            tank.size = (tank_w, tank_h)
+            tank.x = self.width * (0.15 if i == 0 else 0.85) - tank_w / 2
             if not hasattr(tank, "initialized"):
-                # First time: start above the screen 
-                tank.y = self.height + tank_h 
-                tank.initialized = True 
-            else: 
-                # Resize: keep same relative Y (e.g., distance from bottom) 
-                tank.y = tank.y / self.old_height * self.height if hasattr(self, "old_height") else tank.y 
-                tank.y *= 1.002 
-        # Save current height for next resize 
-        self.old_height = self.height 
-        # Facing directions 
-        self.full_tanks[0].flip_horizontal(False) 
-        self.full_tanks[1].flip_horizontal(True) 
-        
+                tank.y = self.height + tank_h
+                tank.initialized = True
+            else:
+                tank.y = tank.y / getattr(self, "old_height", self.height) * self.height
+        self.old_height = self.height
+        self.full_tanks[0].flip_horizontal(False)
+        self.full_tanks[1].flip_horizontal(True)
         self._reposition_ui()
 
     def _switch_turn(self, dt):
@@ -295,23 +358,76 @@ class GameWidgetBase(Widget):
             size=(400, 100),
             pos=(self.width/2 - 200, self.height/2 - 50)
         ))
+        
+    def apply_remote_input(self, commands):
+        """Apply inputs received from client to player 2 (index 1)."""
+        tank = self.full_tanks[1]
+        for cmd in commands:
+            if cmd == "L":
+                tank.x -= 5
+            elif cmd == "R":
+                tank.x += 5
+            elif cmd == "U":
+                tank.rotate_cannon(+self.cannon_angle_speed)
+            elif cmd == "D":
+                tank.rotate_cannon(-self.cannon_angle_speed)
 
-
-    # --- Game Loop ---
     def update_game_state(self, dt):
         ax = ay = 0
         tank = self.active_tank
-        
+
+        # ==========================================================
+        # 🛰️ NETWORK SYNC
+        # ==========================================================
+        if hasattr(self, "network") and self.network:
+            # --- HOST SIDE ---
+            if self.is_host:
+                # Send authoritative tank state
+                try:
+                    host_tank = self.full_tanks[0]
+                    msg = f"STATE {host_tank.x:.1f} {host_tank.y:.1f} {host_tank.cannon_angle:.1f}"
+                    self.network.send(msg)
+                except Exception as e:
+                    print("⚠ Failed to send state:", e)
+
+                # Receive possible client input
+                msg = self.network.recv()
+                if msg and msg.startswith("INPUT"):
+                    try:
+                        _, keys = msg.split(" ", 1)
+                        if "L" in keys: self._keys.add("left")
+                        if "R" in keys: self._keys.add("right")
+                        if "U" in keys: self._keys.add("up")
+                        if "D" in keys: self._keys.add("down")
+                    except Exception as e:
+                        print("⚠ Failed to parse client input:", e)
+
+            # --- CLIENT SIDE ---
+            else:
+                msg = self.network.recv()
+                if msg and msg.startswith("STATE"):
+                    try:
+                        _, x, y, angle = msg.split()
+                        host_tank = self.full_tanks[0]
+                        host_tank.x = float(x)
+                        host_tank.y = float(y)
+                        host_tank.cannon_angle = float(angle)
+                    except Exception as e:
+                        print("⚠ Failed to parse state:", e)
+        # ==========================================================
+
+        # --- Drop start phase ---
         if self.turn_state == "START_DROP":
             all_settled = True
             for i, tank in enumerate(self.full_tanks):
                 self.tank_vy[i] += self.gravity
                 new_y = tank.y + self.tank_vy[i]
 
-                # Check collisions with floor or walls
-                collision_y = 1  # floor
+                # Floor or walls
+                collision_y = 1
                 for wall in self.walls:
-                    wx, wy, ww, wh = wall.pos[0], wall.pos[1], wall.size[0], wall.size[1]
+                    wx, wy = wall.pos
+                    ww, wh = wall.size
                     if (tank.x + tank.width > wx and tank.x < wx + ww) and (new_y <= wy + wh <= tank.y):
                         collision_y = max(collision_y, wy + wh)
 
@@ -325,7 +441,6 @@ class GameWidgetBase(Widget):
 
             if all_settled:
                 self.turn_state = "INPUT"
-                self.vx = self.vy = 0
                 self.turn_timer = 10.0
                 self.active_tank = self.full_tanks[self.current_turn]
 
@@ -339,7 +454,9 @@ class GameWidgetBase(Widget):
                 self.turn_state = "FIRING"
                 self.vx = self.vy = 0
 
-        # --- Input handling ---
+        # ==========================================================
+        # 🎮 INPUT HANDLING
+        # ==========================================================
         if self.turn_state == "INPUT":
             if self.platform == "android":
                 try:
@@ -354,11 +471,20 @@ class GameWidgetBase(Widget):
                 except Exception:
                     pass
             else:
-                # Keyboard controls
                 if "left" in self._keys:  ax -= 1.0
                 if "right" in self._keys: ax += 1.0
                 if "up" in self._keys:    tank.rotate_cannon(+self.cannon_angle_speed)
                 if "down" in self._keys:  tank.rotate_cannon(-self.cannon_angle_speed)
+
+            # Send inputs to host if this is the client
+            if hasattr(self, "network") and self.network and not self.is_host:
+                commands = ""
+                if "left" in self._keys:  commands += "L"
+                if "right" in self._keys: commands += "R"
+                if "up" in self._keys:    commands += "U"
+                if "down" in self._keys:  commands += "D"
+                if commands:
+                    self.network.send("INPUT " + commands)
 
             # --- Physics ---
             ay += self.gravity
@@ -377,53 +503,25 @@ class GameWidgetBase(Widget):
             if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
             elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-            # Wall collisions
-            """for wall in self.walls:
-                wx, wy, ww, wh = wall.x, wall.y, wall.width, wall.height
-                if (new_x < wx + ww and new_x + tank_w > wx and
-                    new_y < wy + wh and new_y + tank_h > wy):
-
-                    prev_x, prev_y = tank.x, tank.y
-
-                    if prev_x + tank_w <= wx:
-                        new_x = wx - tank_w
-                        self.vx = -self.vx * self.bounce
-                    elif prev_x >= wx + ww:
-                        new_x = wx + ww
-                        self.vx = -self.vx * self.bounce
-
-                    if prev_y + tank_h <= wy:
-                        new_y = wy + wh
-                        self.vy = -self.vy * self.bounce
-                    elif prev_y >= wy + wh:
-                        new_y = wy + wh
-                        self.vy = -self.vy * self.bounce"""
-                        
-            # --- Tank vs Wall Collision ---
+            # Tank vs Wall Collision
             for wall in self.walls:
-                # Check if wall has destructible blocks
                 if hasattr(wall, "blocks"):
                     for block in wall.blocks[:]:
-                        if tank.collide_widget(block):                            
-                            # Basic bounce or stop effect
-                            # Determine horizontal or vertical collision
+                        if tank.collide_widget(block):
                             if abs((tank.center_x - block.center_x)) > abs((tank.center_y - block.center_y)):
-                                # Horizontal collision
                                 self.vx *= -self.bounce
                                 if tank.center_x < block.center_x:
                                     new_x = block.x - tank.width
                                 else:
                                     new_x = block.right
                             else:
-                                # Vertical collision
                                 self.vy *= -self.bounce
                                 if tank.center_y < block.center_y:
                                     new_y = block.y - tank.height
                                 else:
                                     new_y = block.top
 
-
-            # Auto-flip tank based on velocity
+            # Auto-flip
             if self.vx > 0.1 and tank.facing_left:
                 tank.flip_horizontal(False)
             elif self.vx < -0.1 and not tank.facing_left:
@@ -431,23 +529,21 @@ class GameWidgetBase(Widget):
 
             tank.pos = (new_x, new_y)
 
-        # --- Ball updates ---
+        # ==========================================================
+        # 💣 BALL UPDATES
+        # ==========================================================
         balls_to_remove = []
         for ball in self.balls:
-            # 1️⃣ Ball movement
             ball.update(dt, self.walls, self.bounce)
 
-            # 2️⃣ Check tank collisions
             for tank in self.full_tanks:
                 if tank.collide_widget(ball):
                     self.game_over(tank, ball)
-                    return  # stop game immediately
+                    return
 
-            # 3️⃣ Destroy wall blocks
             for wall in self.walls:
-                wall.destroy_at(ball.center, radius=ball.width/2)
+                wall.destroy_at(ball.center, radius=ball.width / 2)
 
-            # 4️⃣ Ball settled
             if not ball.fired:
                 balls_to_remove.append(ball)
 
@@ -458,6 +554,8 @@ class GameWidgetBase(Widget):
 
             if not self.balls:
                 self._switch_turn(dt)
+
+
 
     # --- Keyboard handlers ---
     def _on_key_down(self, window, key, scancode, codepoint, modifiers):
