@@ -7,6 +7,8 @@ from kivy.properties import StringProperty
 # Import your scenes
 from scene.title import TitleScreen
 from scene.welcome import WelcomeScreen
+from scene.online_select import OnlineSelectScreen
+
 from scene.stage1_1 import Stage1_1
 from scene.stage1_2 import Stage1_2
 from scene.match_select import MatchSelect
@@ -28,8 +30,12 @@ class GameScreenManager(ScreenManager):
         self.add_widget(Stage1_1(name="stage1_1"))
         self.add_widget(Stage1_2(name="stage1_2"))
         self.add_widget(TankSelectScreen(name="tank_select")) 
+<<<<<<< Updated upstream
         self.add_widget(MatchSelect(name="match_select"))
         self.add_widget(OnlineSetup(name="online_setup"))
+=======
+        self.add_widget(OnlineSelectScreen(name="online_select"))
+>>>>>>> Stashed changes
 
         # Start at title screen
         self.current = "welcome"
