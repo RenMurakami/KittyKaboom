@@ -503,11 +503,7 @@ class GameWidgetBase(Widget):
             if new_y < 0: new_y, self.vy = 0, -self.vy * self.bounce
             elif new_y + tank_h > self.height: new_y, self.vy = self.height - tank_h, -self.vy * self.bounce
 
-<<<<<<< Updated upstream
-            # Tank vs Wall Collision
-=======
             # --- Tank vs Wall Collision ---
->>>>>>> Stashed changes
             for wall in self.walls:
                 if hasattr(wall, "blocks"):
                     for block in wall.blocks[:]:

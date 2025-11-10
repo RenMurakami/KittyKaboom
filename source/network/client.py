@@ -45,7 +45,7 @@ class NetworkClient:
                     self.authorized = True
                     print("Keyword matched. Authorized!")
                     if self.on_message:
-                        self.on_message({"type": "authorized"})
+                        self.on_message({"type": "ready"})
                     
 
             except Exception as e:
