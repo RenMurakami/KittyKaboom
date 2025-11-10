@@ -21,18 +21,14 @@ class BaseStage(Screen):
     """
     Base game stage screen.
     Handles setup, game loop, and accelerometer control on Android.
-    Supports server/client multiplayer.
     """
     def on_enter(self, *args):
         # Create game widget
         p1_color = self.manager.p1_tank_color if hasattr(self.manager, 'p1_tank_color') else 'red'
         p2_color = self.manager.p2_tank_color if hasattr(self.manager, 'p2_tank_color') else 'blue'
 
-        # Multiplayer flags
-        self.is_host = getattr(self.manager, "is_host", True)  # default host
-        self.network = getattr(self.manager, "network", None)
 
-        self.game = GameWidgetBase(p1_color, p2_color, is_host=self.is_host, network=self.network)
+        self.game = GameWidgetBase(p1_color, p2_color)
         self.add_widget(self.game)
 
         # Back button
@@ -52,25 +48,6 @@ class BaseStage(Screen):
 
         # Run game loop at 60 FPS
         Clock.schedule_interval(self.game.update_game_state, 1.0 / 60.0)
-
-        # If multiplayer client, start listening thread
-        # In BaseStage.on_enter:
-        if self.network and not self.is_host:
-            threading.Thread(target=self._listen_server_updates, daemon=True).start()
-        elif self.network and self.is_host:
-            threading.Thread(target=self._listen_client_input, daemon=True).start()
-
-
-    def _listen_client_input(self):
-        """Host: listen to client inputs continuously in a separate thread"""
-        while True:
-            try:
-                msg = self.network.recv()
-                if msg and msg.startswith("INPUT"):
-                    _, keys = msg.split(" ", 1)
-                    self.game.apply_remote_input(keys)
-            except Exception as e:
-                print("⚠ Client input error:", e)
 
     def update_game_state(self, dt):
         """Default per-frame update for all stages."""
@@ -103,51 +80,6 @@ class BaseStage(Screen):
         Clock.unschedule(self.game.update_game_state)
         self.remove_widget(self.game)
 
-    def _listen_server_updates(self):
-        """Client: listen for host updates"""
-        while True:
-            msg = self.network.recv()
-            if msg and msg.startswith("STATE"):
-                try:
-                    _, x, y, angle = msg.split()
-                    def update(dt):
-                        tank = self.full_tanks[0]
-                        tank.x = float(x)
-                        tank.y = float(y)
-                        tank.cannon_angle = float(angle)
-                    Clock.schedule_once(update, 0)
-                except Exception as e:
-                    print("⚠ Failed to parse host state:", e)
-
-
-class NetworkLink:
-    def __init__(self, sock):
-        self.sock = sock
-        self.running = True
-        threading.Thread(target=self.listen_loop, daemon=True).start()
-
-    def send(self, msg):
-        if self.sock:
-            try:
-                self.sock.sendall(msg.encode())
-            except Exception as e:
-                print("[NETWORK] Send failed:", e)
-
-    def recv(self):
-        try:
-            return self.sock.recv(1024).decode()
-        except Exception as e:
-            print("[NETWORK] Receive failed:", e)
-            return None
-
-    def listen_loop(self):
-        while self.running:
-            data = self.recv()
-            if data:
-                print("[NETWORK] Received:", data)
-
-
-
 class GameWidgetBase(Widget):
     """
     Core game logic:
@@ -161,10 +93,8 @@ class GameWidgetBase(Widget):
     LOG_Y_START = 10
     LOG_LINE_HEIGHT = 20
 
-    def __init__(self, p1_color='red', p2_color='blue', is_host=True, network=None, **kwargs):
+    def __init__(self, p1_color='red', p2_color='blue', **kwargs):
         super().__init__(**kwargs)
-        self.is_host = is_host
-        self.network = network
 
         # --- Background ---
         with self.canvas.before:
@@ -358,63 +288,10 @@ class GameWidgetBase(Widget):
             size=(400, 100),
             pos=(self.width/2 - 200, self.height/2 - 50)
         ))
-        
-    def apply_remote_input(self, commands):
-        """Apply inputs received from client to player 2 (index 1)."""
-        tank = self.full_tanks[1]
-        for cmd in commands:
-            if cmd == "L":
-                tank.x -= 5
-            elif cmd == "R":
-                tank.x += 5
-            elif cmd == "U":
-                tank.rotate_cannon(+self.cannon_angle_speed)
-            elif cmd == "D":
-                tank.rotate_cannon(-self.cannon_angle_speed)
 
     def update_game_state(self, dt):
         ax = ay = 0
         tank = self.active_tank
-
-        # ==========================================================
-        # 🛰️ NETWORK SYNC
-        # ==========================================================
-        if hasattr(self, "network") and self.network:
-            # --- HOST SIDE ---
-            if self.is_host:
-                # Send authoritative tank state
-                try:
-                    host_tank = self.full_tanks[0]
-                    msg = f"STATE {host_tank.x:.1f} {host_tank.y:.1f} {host_tank.cannon_angle:.1f}"
-                    self.network.send(msg)
-                except Exception as e:
-                    print("⚠ Failed to send state:", e)
-
-                # Receive possible client input
-                msg = self.network.recv()
-                if msg and msg.startswith("INPUT"):
-                    try:
-                        _, keys = msg.split(" ", 1)
-                        if "L" in keys: self._keys.add("left")
-                        if "R" in keys: self._keys.add("right")
-                        if "U" in keys: self._keys.add("up")
-                        if "D" in keys: self._keys.add("down")
-                    except Exception as e:
-                        print("⚠ Failed to parse client input:", e)
-
-            # --- CLIENT SIDE ---
-            else:
-                msg = self.network.recv()
-                if msg and msg.startswith("STATE"):
-                    try:
-                        _, x, y, angle = msg.split()
-                        host_tank = self.full_tanks[0]
-                        host_tank.x = float(x)
-                        host_tank.y = float(y)
-                        host_tank.cannon_angle = float(angle)
-                    except Exception as e:
-                        print("⚠ Failed to parse state:", e)
-        # ==========================================================
 
         # --- Drop start phase ---
         if self.turn_state == "START_DROP":
@@ -476,15 +353,6 @@ class GameWidgetBase(Widget):
                 if "up" in self._keys:    tank.rotate_cannon(+self.cannon_angle_speed)
                 if "down" in self._keys:  tank.rotate_cannon(-self.cannon_angle_speed)
 
-            # Send inputs to host if this is the client
-            if hasattr(self, "network") and self.network and not self.is_host:
-                commands = ""
-                if "left" in self._keys:  commands += "L"
-                if "right" in self._keys: commands += "R"
-                if "up" in self._keys:    commands += "U"
-                if "down" in self._keys:  commands += "D"
-                if commands:
-                    self.network.send("INPUT " + commands)
 
             # --- Physics ---
             ay += self.gravity
