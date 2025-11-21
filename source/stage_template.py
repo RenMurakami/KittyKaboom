@@ -38,3 +38,11 @@ class StageTemplate(BaseStage):
                 gh * nh if nh > 0 else self.WALL_THICKNESS,
             )
             wall.rebuild_blocks()
+
+
+    def update(self, dt):
+        super().update(dt)
+
+        # 🔹 Only the host should broadcast
+        if self.is_host:
+            self.send_game_state()

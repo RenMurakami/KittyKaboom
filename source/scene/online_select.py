@@ -27,19 +27,19 @@ class OnlineSelectScreen(Screen):
         self.add_widget(layout)
 
     def make_room(self, instance):
-        self.start_network(as_host=True)
+        self.start_network(is_host=True)
 
     def join_room(self, instance):
-        self.start_network(as_host=False)
+        self.start_network(is_host=False)
 
-    def start_network(self, as_host=False):
+    def start_network(self, is_host=False):
         keyword = self.keyword_input.text.strip()
         if not keyword:
             self.status_label.text = "Enter a keyword first!"
             return
 
         if not self.network:
-            self.network = NetworkClient(keyword=keyword, on_message=self.on_message)
+            self.network = NetworkClient(keyword=keyword, is_host = is_host, on_message=self.on_message)
             self.network.start()
             self.status_label.text = "Connected. Waiting for other player…"
 
@@ -51,9 +51,24 @@ class OnlineSelectScreen(Screen):
         if msg["type"] == "authorized":
             self.status_label.text = "Keyword matched! Starting game…"
             self.network.send({"type": "ready"})
-            Clock.schedule_once(lambda dt: setattr(self.manager, 'current', "stage1_1"), 0)
+            Clock.schedule_once(lambda dt: self.start_game(), 0)
         elif msg["type"] == "ready":
             self.status_label.text = "Keyword matched! Starting game…"
-            Clock.schedule_once(lambda dt: setattr(self.manager, 'current', "stage1_1"), 0)
+            Clock.schedule_once(lambda dt: self.start_game(), 0)
         elif msg["type"] == "unauthorized":
             self.status_label.text = "Keyword mismatch!"
+
+
+    def start_game(self):
+        game_screen = self.manager.get_screen("stage1_1")
+        game_screen.network = self.network
+
+        # host = player 0, client = player 1
+        if self.network.is_host:
+            game_screen.player_id = 0
+            game_screen.is_host = True
+        else:
+            game_screen.player_id = 1
+            game_screen.is_host = False
+
+        self.manager.current = "stage1_1"

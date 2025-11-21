@@ -65,8 +65,11 @@ class FullTank(Widget):
 
     def rotate_cannon(self, delta_angle: float):
         self.cannon_angle = max(-80, min(80, self.cannon_angle + delta_angle))
+        self.set_cannon()
+        
+    def set_cannon(self):
         self._cannon_rotate.angle = self.cannon_angle
-
+        
     def collide_widget(self, other_widget):
         """Circular collision."""
         dx = self.center_x - other_widget.center_x

@@ -62,18 +62,23 @@ class Wall(Widget):
         instance.rect.size = instance.size
 
     def destroy_at(self, point, radius=15):
-        """Destroy blocks intersecting a circular area"""
-        to_remove = []
-        for block in self.blocks:
-            bx, by = block.center
-            dx = bx - point[0]
-            dy = by - point[1]
-            if dx*dx + dy*dy <= radius*radius:
-                to_remove.append(block)
+            """Destroy blocks intersecting a circular area and return destroyed blocks"""
+            to_remove = []
+            for block in self.blocks:
+                bx, by = block.center
+                dx = bx - point[0]
+                dy = by - point[1]
+                if dx*dx + dy*dy <= radius*radius:
+                    to_remove.append(block)
 
-        for block in to_remove:
-            self.remove_widget(block)
-            self.blocks.remove(block)
+            for block in to_remove:
+                try:
+                    self.remove_widget(block)
+                except: 
+                    pass
+                self.blocks.remove(block)
+
+            return to_remove  # << return destroyed blocks
 
     @staticmethod
     def wall_collides(widget, wall):

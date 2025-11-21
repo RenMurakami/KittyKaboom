@@ -1,4 +1,5 @@
 from stage_template import StageTemplate
+from ball import Ball
 
 class Stage1_1(StageTemplate):
     def __init__(self, **kwargs):
